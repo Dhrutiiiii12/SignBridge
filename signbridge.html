@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SignBridge — Real-Time Sign Language Communication</title>
+  <title>SignBridge — Real-Time ISL Communication</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -302,11 +302,11 @@
 <!-- ── API KEY BANNER ─────────────────────────────────── -->
 <div id="api-banner">
   <div class="brand">Sign<em>Bridge</em></div>
-  <p class="banner-sub">Real-time ASL-to-text — no interpreter needed.</p>
+  <p class="banner-sub">Real-time ISL-to-text — no interpreter needed.</p>
 
   <p style="font-size:13px;color:var(--text-dim);margin-top:4px;">Backend server URL</p>
   <div class="banner-backend-row">
-    <input type="text" id="backend-url-input" value="http://localhost:8000" spellcheck="false">
+    <input type="text" id="backend-url-input" value="http://localhost:8001" spellcheck="false">
   </div>
 
   <hr class="banner-divider">
@@ -668,7 +668,7 @@ async function mistralCapture() {
         max_tokens: 150,
         messages: [{ role: 'user', content: [
           { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } },
-          { type: 'text', text: 'You are helping a deaf person communicate with a hearing person in real time. Look at this image. If you can clearly see hands making ASL (American Sign Language) signs, output ONLY the English words being signed — no explanation, no punctuation beyond what is natural, just the words. If there are no hands clearly visible, the image is blurry, or you cannot confidently determine what is being signed, output exactly one word: WAITING' }
+          { type: 'text', text: 'You are helping a deaf person communicate with a hearing person in real time. Look at this image. If you can clearly see hands making ISL (Indian Sign Language) signs, output ONLY the English words being signed — no explanation, no punctuation beyond what is natural, just the words. If there are no hands clearly visible, the image is blurry, or you cannot confidently determine what is being signed, output exactly one word: WAITING' }
         ]}]
       })
     });
