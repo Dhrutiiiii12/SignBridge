@@ -2,7 +2,7 @@
 SignBridge backend — FastAPI server for hand-landmark-based sign recognition.
 
 Run:
-    uvicorn main:app --reload --port 8000
+    uvicorn main:app --reload --port 8001
 
 Endpoints:
     POST /recognize          → predict sign from landmarks
@@ -13,10 +13,11 @@ Endpoints:
     GET  /health             → liveness check
 """
 
+from __future__ import annotations
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
-from typing import Optional
 from recognizer import SignRecognizer
 
 app = FastAPI(title="SignBridge", version="1.0.0")

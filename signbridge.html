@@ -2,31 +2,44 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>SignBridge — Real-Time ISL Communication</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0F0F14;
-      --surface:   #1A1A22;
-      --surface2:  #22222E;
-      --accent:    #5EE8A0;
-      --accent-lo: rgba(94,232,160,0.12);
-      --accent-md: rgba(94,232,160,0.22);
-      --text:      #F2F0EB;
-      --text-dim:  #7A7A95;
-      --border:    #2A2A3C;
-      --red:       #FF6B6B;
-      --red-lo:    rgba(255,107,107,0.12);
+      --bg:           #FFFFFF;
+      --bg-warm:      #FFFBF0;
+      --bg-input:     #FAF8F5;
+      --accent:       #F9C5B0;
+      --accent-dark:  #F5A07A;
+      --accent-pink:  #FF9BBE;
+      --text:         #1A1A1A;
+      --text-dim:     #C4B8B0;
+      --text-mid:     #A89B95;
+      --border:       rgba(0,0,0,0.07);
+      --border-soft:  rgba(0,0,0,0.05);
+      --shadow-card:  0px 4px 8.6px rgba(0,0,0,0.12);
+      --shadow-send:  0px 4px 7px rgba(232,132,90,0.30);
+      --cam-gradient: linear-gradient(180deg,
+          rgba(251,213,196,0.31)   6.25%,
+          rgba(255,255,255,0.95)  27.40%,
+          #FFFBF0                 47.12%,
+          rgba(253,234,225,0.975) 60.10%,
+          rgba(252,223,211,0.988) 75.44%,
+          #FFEDF5                 98.56%);
+      --send-gradient: linear-gradient(135deg, #FFFBF0 0%, #F9C5B0 45.67%, #FF9BBE 100%);
+      --chip-gradient: linear-gradient(96.59deg, rgba(255,255,255,0.92) 1.39%, rgba(245,160,122,0.074) 128.26%);
     }
 
     html, body {
       height: 100%;
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
 
     /* ─── API KEY BANNER ─────────────────────────────── */
@@ -35,159 +48,324 @@
       background: var(--bg);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      gap: 20px; padding: 32px 24px; z-index: 200;
+      gap: 18px; padding: 32px 24px; z-index: 200;
     }
     #api-banner.hidden { display: none; }
 
-    .brand { font-size: 38px; font-weight: 800; letter-spacing: -1.5px; line-height: 1; }
-    .brand em { color: var(--accent); font-style: normal; }
-    .banner-sub { color: var(--text-dim); font-size: 15px; text-align: center; max-width: 360px; line-height: 1.6; }
+    .banner-brand {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 34px; font-weight: 600;
+      color: var(--text); letter-spacing: -0.5px;
+    }
+    .banner-sub {
+      color: var(--text-mid); font-size: 14px;
+      text-align: center; max-width: 300px; line-height: 1.6;
+    }
 
-    .key-row { display: flex; gap: 10px; width: 100%; max-width: 460px; }
-    .key-row input {
-      flex: 1; background: var(--surface); border: 1.5px solid var(--border);
-      border-radius: 10px; padding: 12px 16px; color: var(--text);
-      font-size: 14px; font-family: 'SF Mono', 'Fira Code', monospace;
+    .banner-field-label {
+      font-size: 12px; color: var(--text-mid);
+      align-self: flex-start; margin-left: calc(50% - 210px);
+      letter-spacing: 0.02em;
+    }
+
+    .banner-row { display: flex; gap: 10px; width: 100%; max-width: 420px; }
+    .banner-row input {
+      flex: 1; background: var(--bg-input);
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 12px 16px; color: var(--text);
+      font-size: 14px; font-family: 'SF Mono', monospace;
       outline: none; transition: border-color .2s;
     }
-    .key-row input:focus { border-color: var(--accent); }
-    .key-row input::placeholder { color: var(--text-dim); font-family: inherit; }
+    .banner-row input:focus { border-color: var(--accent-dark); }
+    .banner-row input::placeholder { color: var(--text-dim); }
 
-    .banner-backend-row {
-      display: flex; gap: 10px; width: 100%; max-width: 460px;
+    .banner-divider {
+      width: 100%; max-width: 420px;
+      border: none; border-top: 1px solid var(--border);
     }
-    .banner-backend-row input {
-      flex: 1; background: var(--surface); border: 1.5px solid var(--border);
-      border-radius: 10px; padding: 10px 14px; color: var(--text);
-      font-size: 13px; font-family: monospace; outline: none;
-      transition: border-color .2s;
-    }
-    .banner-backend-row input:focus { border-color: var(--accent); }
 
-    .btn-green {
-      background: var(--accent); color: #0a0a10; border: none;
-      border-radius: 10px; padding: 12px 24px; font-size: 14px;
-      font-weight: 700; cursor: pointer; white-space: nowrap; transition: opacity .15s;
+    .btn-send {
+      background: var(--send-gradient);
+      border: 1px solid var(--accent-dark);
+      box-shadow: var(--shadow-send);
+      border-radius: 14px; padding: 12px 22px;
+      font-size: 14px; font-weight: 600; color: var(--text);
+      cursor: pointer; white-space: nowrap;
+      transition: opacity .15s;
     }
-    .btn-green:hover { opacity: .88; }
-    .btn-green:active { opacity: .72; }
+    .btn-send:hover { opacity: .88; }
+    .btn-send:active { opacity: .72; }
 
-    .banner-note { font-size: 11px; color: var(--text-dim); text-align: center; max-width: 380px; line-height: 1.7; }
-    .banner-divider { width: 100%; max-width: 460px; border: none; border-top: 1px solid var(--border); }
+    .banner-note {
+      font-size: 11px; color: var(--text-dim);
+      text-align: center; max-width: 340px; line-height: 1.7;
+    }
 
     /* ─── MAIN APP ───────────────────────────────────── */
-    #app { display: grid; grid-template-columns: 1fr 1fr; height: 100dvh; }
-
-    /* ─── LEFT PANEL ─────────────────────────────────── */
-    #left { display: flex; flex-direction: column; padding: 18px 20px; gap: 14px; border-right: 1px solid var(--border); overflow: hidden; }
-
-    .panel-top { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-    .brand-sm { font-size: 17px; font-weight: 800; letter-spacing: -.5px; }
-    .brand-sm em { color: var(--accent); font-style: normal; }
-
-    .top-right { display: flex; align-items: center; gap: 8px; }
-
-    /* Status chip */
-    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; transition: background .3s, color .3s; }
-    .chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-    .chip.ready        { background: rgba(255,255,255,.06); color: var(--text-dim); }
-    .chip.reading      { background: var(--accent-lo); color: var(--accent); }
-    .chip.reading .chip-dot { animation: blink 1s infinite; }
-    .chip.interpreting { background: var(--accent-md); color: var(--accent); }
-    .chip.interpreting .chip-dot { animation: blink .45s infinite; }
-    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:.2; } }
-
-    .icon-btn {
-      background: none; border: 1px solid var(--border); border-radius: 7px;
-      padding: 4px 10px; color: var(--text-dim); font-size: 11px; font-weight: 600;
-      cursor: pointer; transition: border-color .2s, color .2s; letter-spacing: .04em;
+    #app {
+      display: flex; flex-direction: column;
+      min-height: 100dvh; max-width: 430px;
+      margin: 0 auto; position: relative;
     }
-    .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .icon-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-lo); }
 
-    /* Camera */
-    #cam-box {
-      position: relative; width: 100%; aspect-ratio: 4/5; max-height: 44vh;
-      border-radius: 16px; overflow: hidden; background: #0c0c13;
-      border: 2px solid var(--border); transition: border-color .4s, box-shadow .4s;
+    /* ─── HEADER ─────────────────────────────────────── */
+    #header {
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px 20px 10px; position: relative; flex-shrink: 0;
     }
-    #cam-box.lit {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 1px rgba(94,232,160,.15), 0 0 28px rgba(94,232,160,.3), 0 0 80px rgba(94,232,160,.08);
+    #header-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 24px; font-weight: 500; color: var(--text);
+      letter-spacing: -0.2px;
     }
-    #video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+    #settings-btn {
+      position: absolute; right: 16px; top: 50%;
+      transform: translateY(-50%);
+      background: none; border: none; cursor: pointer;
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; transition: background .15s;
+    }
+    #settings-btn:hover { background: rgba(0,0,0,0.05); }
+    #settings-btn svg { color: var(--text-mid); }
 
-    .corner { position: absolute; width: 18px; height: 18px; border-style: solid; border-color: var(--accent); opacity: 0; transition: opacity .4s; pointer-events: none; }
-    #cam-box.lit .corner { opacity: 1; }
-    .c-tl { top:8px;  left:8px;  border-width:2px 0 0 2px; border-radius:4px 0 0 0; }
-    .c-tr { top:8px;  right:8px; border-width:2px 2px 0 0; border-radius:0 4px 0 0; }
-    .c-bl { bottom:8px; left:8px;  border-width:0 0 2px 2px; border-radius:0 0 0 4px; }
-    .c-br { bottom:8px; right:8px; border-width:0 2px 2px 0; border-radius:0 0 4px 0; }
+    /* ─── CAMERA CARD ────────────────────────────────── */
+    #cam-section { padding: 0 17px; flex-shrink: 0; }
 
-    /* Source badge */
+    #cam-card {
+      width: 100%; border-radius: 30px;
+      border: 1px solid var(--accent);
+      background: var(--cam-gradient);
+      position: relative; overflow: visible;
+      padding: 10px 10px 0;
+    }
+
+    #cam-inner {
+      width: 100%; border-radius: 20px;
+      background: white;
+      box-shadow: var(--shadow-card);
+      overflow: hidden; position: relative;
+      aspect-ratio: 4 / 4.2;
+    }
+
+    #video {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      transform: scaleX(-1);
+      display: block;
+      background: #fff;
+    }
+
+    /* Status chip — absolute over camera */
+    #status-chip {
+      position: absolute; top: 23px; left: 23px;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 13px 5px 10px;
+      border-radius: 99px;
+      background: var(--chip-gradient);
+      border: 1px solid var(--border-soft);
+      box-shadow: 0px 2px 12px rgba(0,0,0,0.08);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 10;
+      transition: all .3s;
+    }
+    .chip-dot {
+      width: 6px; height: 6px; border-radius: 3px;
+      background: #FE9151; flex-shrink: 0;
+    }
+    .chip-dot.pulse { animation: chipPulse 1.2s infinite; }
+    @keyframes chipPulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: .5; transform: scale(.8); }
+    }
+    #chip-label {
+      font-size: 12px; color: var(--text-mid);
+      white-space: nowrap; letter-spacing: 0.02em;
+    }
+
+    /* Source badge inside camera (bottom right) */
     #source-badge {
       position: absolute; bottom: 8px; right: 8px;
-      background: rgba(0,0,0,.6); backdrop-filter: blur(6px);
-      border-radius: 6px; padding: 3px 8px;
-      font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
-      color: var(--text-dim); pointer-events: none; transition: color .3s;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(6px);
+      border-radius: 8px; padding: 2px 8px;
+      font-size: 10px; font-weight: 600;
+      letter-spacing: .06em; text-transform: uppercase;
+      color: var(--text-mid); pointer-events: none;
+      border: 1px solid var(--border);
     }
-    #source-badge.backend { color: var(--accent); }
-    #source-badge.mistral { color: #A78BFA; }
+    #source-badge.backend { color: var(--accent-dark); }
+    #source-badge.mistral { color: #B088D8; }
 
-    #cam-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-dim); pointer-events: none; }
-    #cam-placeholder svg { opacity: .35; }
+    /* Camera placeholder */
+    #cam-placeholder {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px; color: var(--text-dim);
+    }
     #cam-placeholder span { font-size: 13px; }
 
-    /* Translation */
-    #translation-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 4px 8px; min-height: 72px; }
-    #xlate { font-size: clamp(28px, 3.2vw, 44px); font-weight: 700; color: var(--text); line-height: 1.2; text-align: center; transition: font-size .3s, color .3s; word-break: break-word; }
-    #xlate.idle { font-size: 14px; font-weight: 400; color: var(--text-dim); }
-    #xlate.low-conf { color: #A78BFA; }
+    /* Camera hint bar */
+    #cam-hint {
+      background: white; border-radius: 20px;
+      margin: 0; padding: 12px 16px;
+      font-size: 12px; color: var(--text-mid);
+      letter-spacing: 0.02em;
+    }
 
-    #wave { width: 100%; height: 38px; flex-shrink: 0; display: block; }
+    /* Train button in camera area */
+    #train-toggle {
+      position: absolute; top: 23px; right: 23px;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(6px);
+      border: 1px solid var(--border);
+      border-radius: 20px; padding: 5px 12px;
+      font-size: 11px; font-weight: 600;
+      color: var(--text-mid); cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: all .2s; z-index: 10;
+    }
+    #train-toggle:hover { border-color: var(--accent-dark); color: var(--accent-dark); }
+    #train-toggle.active { border-color: var(--accent-dark); color: var(--accent-dark); background: rgba(249,197,176,0.15); }
 
-    /* ─── RIGHT PANEL ────────────────────────────────── */
-    #right { display: flex; flex-direction: column; padding: 18px 20px; gap: 14px; overflow: hidden; }
+    /* ─── TRANSLATION AREA ───────────────────────────── */
+    #translation-section {
+      flex: 1; padding: 20px 17px 8px;
+      display: flex; align-items: flex-start;
+    }
+    #xlate {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 28px; font-weight: 500;
+      line-height: 1.35; color: var(--text-dim);
+      transition: color .3s;
+      word-break: break-word;
+    }
+    #xlate.active  { color: var(--text); }
+    #xlate.low-conf { color: var(--accent-dark); }
 
-    .section-label { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--text-dim); flex-shrink: 0; }
-
-    #history { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
-    #history::-webkit-scrollbar { width: 3px; }
-    #history::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-    .empty-msg { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-dim); text-align: center; }
-    .empty-msg svg { opacity: .25; }
-    .empty-msg p { font-size: 13px; max-width: 180px; line-height: 1.6; }
+    /* ─── CONVERSATION HISTORY ───────────────────────── */
+    #history-section {
+      padding: 0 17px 8px;
+      max-height: 160px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    #history-section:empty { display: none; }
+    #history-section::-webkit-scrollbar { width: 3px; }
+    #history-section::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; }
 
     .bubble-row { display: flex; flex-direction: column; gap: 3px; }
-    .bubble-label { font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; padding: 0 4px; }
-    .bubble { display: inline-block; max-width: 88%; padding: 9px 13px; border-radius: 14px; font-size: 14px; line-height: 1.5; word-break: break-word; }
+    .bubble-lbl {
+      font-size: 10px; font-weight: 600;
+      letter-spacing: .07em; text-transform: uppercase;
+      padding: 0 4px; color: var(--text-dim);
+    }
+    .bubble-row.signed .bubble-lbl { color: var(--accent-dark); }
     .bubble-row.signed { align-items: flex-start; }
-    .bubble-row.signed .bubble-label { color: var(--accent); }
-    .bubble-row.signed .bubble { background: var(--accent-lo); color: var(--accent); border: 1px solid rgba(94,232,160,.18); border-bottom-left-radius: 4px; }
     .bubble-row.hearer { align-items: flex-end; }
-    .bubble-row.hearer .bubble-label { color: var(--text-dim); align-self: flex-end; }
-    .bubble-row.hearer .bubble { background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-bottom-right-radius: 4px; }
+    .bubble {
+      display: inline-block; max-width: 85%;
+      padding: 8px 12px; border-radius: 14px;
+      font-size: 14px; line-height: 1.45; word-break: break-word;
+    }
+    .bubble-row.signed .bubble {
+      background: rgba(249,197,176,0.18);
+      color: #C97A50;
+      border: 1px solid rgba(249,197,176,0.4);
+      border-bottom-left-radius: 4px;
+    }
+    .bubble-row.hearer .bubble {
+      background: var(--bg-input);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-bottom-right-radius: 4px;
+    }
 
-    #reply-area { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
-    #reply-input { width: 100%; background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; padding: 11px 14px; color: var(--text); font-size: 14px; font-family: inherit; resize: none; outline: none; min-height: 72px; max-height: 110px; transition: border-color .2s; line-height: 1.5; }
-    #reply-input:focus { border-color: var(--accent); }
-    #reply-input::placeholder { color: var(--text-dim); }
+    /* ─── WAVEFORM ───────────────────────────────────── */
+    #wave-section { padding: 0 17px 4px; flex-shrink: 0; }
+    #wave { width: 100%; height: 24px; display: block; }
 
-    .reply-footer { display: flex; align-items: center; justify-content: space-between; }
-    .reply-hint { font-size: 11px; color: var(--text-dim); }
-    #send-btn { background: var(--accent); color: #0a0a10; border: none; border-radius: 9px; padding: 9px 22px; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+    /* ─── FOOTER INFO ────────────────────────────────── */
+    #footer-info {
+      padding: 4px 17px 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #timestamp {
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      font-size: 12px; color: var(--text-dim);
+    }
+    #signs-count {
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      font-size: 12px; color: var(--text-dim);
+    }
+
+    /* ─── INPUT BAR ──────────────────────────────────── */
+    #input-bar {
+      padding: 13px 17px 20px;
+      border-top: 1px solid var(--border-soft);
+      display: flex; gap: 8px; align-items: center;
+      flex-shrink: 0;
+      background: var(--bg);
+    }
+
+    #reply-wrap {
+      flex: 1; background: var(--bg-input);
+      border: 1px solid var(--border); border-radius: 14px;
+      display: flex; align-items: center;
+      padding: 0 11px; min-height: 44px;
+    }
+    #reply-input {
+      flex: 1; background: none; border: none;
+      font-size: 15px; color: var(--text);
+      font-family: inherit; outline: none;
+      padding: 10px 0; resize: none;
+      min-height: 44px; max-height: 88px;
+      line-height: 1.4;
+    }
+    #reply-input::placeholder { color: rgba(26,26,26,0.4); }
+    #mic-btn {
+      background: none; border: none; cursor: pointer;
+      width: 24px; height: 24px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-dim); opacity: .7;
+      transition: opacity .15s;
+    }
+    #mic-btn:hover { opacity: 1; }
+
+    .action-btn {
+      width: 44px; height: 44px; border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
+      transition: opacity .15s;
+    }
+    .action-btn:hover { opacity: .8; }
+    .action-btn svg { color: var(--text-mid); }
+
+    #send-btn {
+      width: 44px; height: 44px; border-radius: 14px;
+      border: 1px solid var(--accent-dark);
+      background: var(--send-gradient);
+      box-shadow: var(--shadow-send);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
+      transition: opacity .15s;
+    }
     #send-btn:hover { opacity: .88; }
     #send-btn:active { opacity: .72; }
+    #send-btn svg { color: var(--text); }
 
     /* ─── TRAINING DRAWER ────────────────────────────── */
     #train-drawer {
-      position: fixed; top: 0; right: 0; bottom: 0; width: 340px;
-      background: var(--surface); border-left: 1px solid var(--border);
-      display: flex; flex-direction: column; gap: 0;
-      transform: translateX(100%); transition: transform .3s cubic-bezier(.4,0,.2,1);
+      position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100vw);
+      background: var(--bg); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .3s cubic-bezier(.4,0,.2,1);
       z-index: 150; overflow: hidden;
+      box-shadow: -4px 0 24px rgba(0,0,0,0.06);
     }
     #train-drawer.open { transform: translateX(0); }
 
@@ -195,188 +373,221 @@
       display: flex; align-items: center; justify-content: space-between;
       padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
     }
-    .drawer-title { font-size: 15px; font-weight: 700; }
-    .drawer-close { background: none; border: none; color: var(--text-dim); font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 6px; }
+    .drawer-title { font-size: 16px; font-weight: 600; font-family: 'Playfair Display', serif; }
+    .drawer-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 22px; color: var(--text-mid); line-height: 1;
+      padding: 2px 6px; border-radius: 6px;
+    }
     .drawer-close:hover { color: var(--text); }
 
-    .drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+    .drawer-body {
+      flex: 1; overflow-y: auto; padding: 16px 20px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
 
-    /* Backend status in drawer */
     .backend-status {
-      display: flex; align-items: center; gap: 8px; padding: 10px 14px;
-      border-radius: 10px; border: 1px solid var(--border); font-size: 13px;
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-radius: 12px;
+      border: 1px solid var(--border); font-size: 13px;
+      color: var(--text-mid); background: var(--bg-input);
     }
-    .backend-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
-    .backend-status.connected .backend-dot { background: var(--accent); animation: blink 2s infinite; }
-    .backend-status.connected { border-color: rgba(94,232,160,.25); }
+    .be-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+    .backend-status.connected .be-dot { background: #52C97A; animation: chipPulse 2s infinite; }
 
-    /* Record section */
-    .record-section { display: flex; flex-direction: column; gap: 10px; }
-    .record-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); }
+    .drawer-section-label {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: .09em; text-transform: uppercase; color: var(--text-dim);
+    }
 
-    .sign-name-row { display: flex; gap: 8px; }
     .sign-name-row input {
-      flex: 1; background: var(--surface2); border: 1.5px solid var(--border);
-      border-radius: 9px; padding: 9px 12px; color: var(--text);
-      font-size: 14px; font-weight: 600; text-transform: uppercase; font-family: inherit;
-      outline: none; transition: border-color .2s; letter-spacing: .05em;
+      width: 100%; background: var(--bg-input);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 14px; color: var(--text);
+      font-size: 14px; font-weight: 600; letter-spacing: .05em;
+      text-transform: uppercase; font-family: inherit;
+      outline: none; transition: border-color .2s;
     }
-    .sign-name-row input:focus { border-color: var(--accent); }
-    .sign-name-row input::placeholder { color: var(--text-dim); font-weight: 400; letter-spacing: 0; }
+    .sign-name-row input:focus { border-color: var(--accent-dark); }
+    .sign-name-row input::placeholder { color: var(--text-dim); font-weight: 400; letter-spacing: 0; text-transform: none; }
 
     .record-controls { display: flex; gap: 8px; }
     #capture-btn {
-      flex: 1; background: var(--accent-lo); color: var(--accent);
-      border: 1.5px solid rgba(94,232,160,.3); border-radius: 9px;
-      padding: 10px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
-      transition: background .2s; display: flex; align-items: center; justify-content: center; gap: 6px;
+      flex: 1; background: rgba(249,197,176,0.18);
+      color: var(--accent-dark);
+      border: 1px solid rgba(245,160,122,0.35);
+      border-radius: 10px; padding: 10px 14px;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: background .2s;
     }
-    #capture-btn:hover { background: var(--accent-md); }
+    #capture-btn:hover { background: rgba(249,197,176,0.3); }
     #capture-btn:disabled { opacity: .4; cursor: not-allowed; }
 
     #auto-btn {
-      background: var(--surface2); color: var(--text-dim);
-      border: 1.5px solid var(--border); border-radius: 9px;
-      padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
-      transition: all .2s; white-space: nowrap;
+      background: var(--bg-input); color: var(--text-mid);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 14px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all .2s; white-space: nowrap;
     }
-    #auto-btn:hover { border-color: var(--accent); color: var(--accent); }
-    #auto-btn.recording { border-color: var(--red); color: var(--red); background: var(--red-lo); animation: blink .5s infinite; }
+    #auto-btn:hover { border-color: var(--accent-dark); color: var(--accent-dark); }
+    #auto-btn.recording { border-color: #FF6B6B; color: #FF6B6B; background: rgba(255,107,107,0.08); }
 
     .sample-progress { display: flex; align-items: center; gap: 10px; }
-    #sample-bar-wrap { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
-    #sample-bar { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width .3s; }
-    #sample-count-label { font-size: 12px; color: var(--text-dim); white-space: nowrap; min-width: 60px; text-align: right; }
+    #sample-bar-wrap { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    #sample-bar { height: 100%; background: var(--send-gradient); border-radius: 2px; width: 0%; transition: width .3s; }
+    #sample-count-label { font-size: 11px; color: var(--text-dim); white-space: nowrap; min-width: 64px; text-align: right; }
 
-    .drawer-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
-
-    /* Trained signs list */
-    .signs-list { display: flex; flex-direction: column; gap: 6px; }
-    .sign-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 8px 12px; border-radius: 8px; background: var(--surface2);
-      border: 1px solid var(--border);
-    }
-    .sign-name-chip { flex: 1; font-size: 13px; font-weight: 700; letter-spacing: .05em; }
-    .sign-sample-count { font-size: 11px; color: var(--text-dim); }
-    .sign-del-btn {
-      background: none; border: none; color: var(--text-dim); cursor: pointer;
-      font-size: 16px; line-height: 1; padding: 2px 4px; border-radius: 4px; transition: color .15s;
-    }
-    .sign-del-btn:hover { color: var(--red); }
-
-    .empty-signs { font-size: 13px; color: var(--text-dim); text-align: center; padding: 20px 0; line-height: 1.6; }
-
-    /* Accuracy badge */
     #accuracy-badge {
-      display: none; padding: 8px 14px; border-radius: 8px;
-      background: var(--accent-lo); border: 1px solid rgba(94,232,160,.2);
-      font-size: 12px; color: var(--accent); text-align: center;
+      display: none; padding: 8px 14px; border-radius: 10px;
+      background: rgba(249,197,176,0.15); border: 1px solid rgba(245,160,122,0.25);
+      font-size: 12px; color: var(--accent-dark); text-align: center;
     }
     #accuracy-badge.visible { display: block; }
 
-    /* ─── ERROR TOAST ────────────────────────────────── */
+    .drawer-divider { border: none; border-top: 1px solid var(--border); }
+
+    .signs-list { display: flex; flex-direction: column; gap: 6px; }
+    .sign-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; border-radius: 10px;
+      background: var(--bg-input); border: 1px solid var(--border);
+    }
+    .sign-name-chip { flex: 1; font-size: 13px; font-weight: 700; letter-spacing: .04em; color: var(--text); }
+    .sign-sample-count { font-size: 11px; color: var(--text-dim); }
+    .sign-del-btn {
+      background: none; border: none; color: var(--text-dim);
+      cursor: pointer; font-size: 18px; line-height: 1;
+      padding: 2px 4px; border-radius: 4px; transition: color .15s;
+    }
+    .sign-del-btn:hover { color: #FF6B6B; }
+    .empty-signs { font-size: 13px; color: var(--text-dim); text-align: center; padding: 20px 0; line-height: 1.6; }
+
+    /* ─── TOAST ──────────────────────────────────────── */
     #toast {
-      position: fixed; bottom: 20px; left: 50%;
+      position: fixed; bottom: 80px; left: 50%;
       transform: translateX(-50%) translateY(70px);
-      background: #1f1010; border: 1px solid #4a2020; color: #ff9999;
-      padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 300;
-      transition: transform .3s cubic-bezier(.4,0,.2,1); pointer-events: none;
-      max-width: 90vw; white-space: normal; text-align: center;
+      background: var(--text); color: white;
+      padding: 10px 18px; border-radius: 20px;
+      font-size: 13px; z-index: 300;
+      transition: transform .3s cubic-bezier(.4,0,.2,1);
+      pointer-events: none; max-width: 90vw;
+      white-space: normal; text-align: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
     }
     #toast.show { transform: translateX(-50%) translateY(0); }
-
-    /* ─── MOBILE ─────────────────────────────────────── */
-    @media (max-width: 680px) {
-      html, body { overflow: auto; }
-      #app { grid-template-columns: 1fr; height: auto; min-height: 100dvh; }
-      #left { border-right: none; border-bottom: 1px solid var(--border); }
-      #cam-box { max-height: 55vw; }
-      #right { min-height: 60vh; }
-      #train-drawer { width: 100%; }
-    }
   </style>
 </head>
 <body>
 
 <!-- ── API KEY BANNER ─────────────────────────────────── -->
 <div id="api-banner">
-  <div class="brand">Sign<em>Bridge</em></div>
-  <p class="banner-sub">Real-time ISL-to-text — no interpreter needed.</p>
+  <div class="banner-brand">SignBridge</div>
+  <p class="banner-sub">Real-time ISL-to-text communication — no interpreter needed.</p>
 
-  <p style="font-size:13px;color:var(--text-dim);margin-top:4px;">Backend server URL</p>
-  <div class="banner-backend-row">
-    <input type="text" id="backend-url-input" value="http://localhost:8001" spellcheck="false">
+  <p style="font-size:12px;color:var(--text-mid);align-self:flex-start;margin-left:calc(50% - 210px)">Backend server URL</p>
+  <div class="banner-row">
+    <input type="text" id="backend-url-input" value="http://localhost:8000" spellcheck="false">
   </div>
 
   <hr class="banner-divider">
 
-  <p style="font-size:13px;color:var(--text-dim);">Mistral API key <span style="opacity:.5">(fallback when confidence is low)</span></p>
-  <div class="key-row">
+  <p style="font-size:12px;color:var(--text-mid);align-self:flex-start;margin-left:calc(50% - 210px)">Mistral API key <span style="opacity:.5">(fallback)</span></p>
+  <div class="banner-row">
     <input type="password" id="key-input" placeholder="Mistral API key… (optional)" autocomplete="off" spellcheck="false">
-    <button class="btn-green" onclick="startApp()">Start</button>
+    <button class="btn-send" onclick="startApp()">Start</button>
   </div>
-  <p class="banner-note">Keys are held only in memory and never saved to disk.</p>
+  <p class="banner-note">Keys are held in memory only — never saved to disk.</p>
 </div>
 
 <!-- ── MAIN APP ──────────────────────────────────────── -->
 <div id="app" style="display:none">
 
-  <!-- Left: camera + translation -->
-  <div id="left">
-    <div class="panel-top">
-      <div class="brand-sm">Sign<em>Bridge</em></div>
-      <div class="top-right">
-        <div id="chip" class="chip ready">
-          <div class="chip-dot"></div>
-          <span id="chip-label">Ready</span>
+  <!-- Header -->
+  <div id="header">
+    <span id="header-title">Signbridge</span>
+    <button id="settings-btn" onclick="showBanner()" title="Settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Camera Card -->
+  <div id="cam-section">
+    <div id="cam-card">
+      <!-- Status chip -->
+      <div id="status-chip">
+        <div class="chip-dot" id="chip-dot"></div>
+        <span id="chip-label">Ready</span>
+      </div>
+
+      <!-- Train button -->
+      <button id="train-toggle" onclick="toggleDrawer()">Train</button>
+
+      <!-- Inner camera -->
+      <div id="cam-inner">
+        <video id="video" autoplay playsinline muted></video>
+        <div id="source-badge">—</div>
+        <div id="cam-placeholder">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" style="opacity:.35;color:var(--text-dim)">
+            <rect x="2" y="7" width="15" height="12" rx="2"/>
+            <path d="M17 9l5-3v12l-5-3"/>
+          </svg>
+          <span id="cam-msg">Starting camera…</span>
         </div>
-        <button class="icon-btn" id="train-btn" onclick="toggleDrawer()">Train</button>
-        <button class="icon-btn" onclick="showBanner()">Settings</button>
       </div>
-    </div>
 
-    <div id="cam-box">
-      <video id="video" autoplay playsinline muted></video>
-      <div class="corner c-tl"></div>
-      <div class="corner c-tr"></div>
-      <div class="corner c-bl"></div>
-      <div class="corner c-br"></div>
-      <div id="source-badge">—</div>
-      <div id="cam-placeholder">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
-          <rect x="2" y="7" width="15" height="12" rx="2"/>
-          <path d="M17 9l5-3v12l-5-3"/>
-        </svg>
-        <span id="cam-msg">Starting camera…</span>
-      </div>
+      <!-- Hint bar -->
+      <div id="cam-hint">Keep your face in centre</div>
     </div>
+  </div>
 
-    <div id="translation-wrap">
-      <div id="xlate" class="idle">Position yourself in frame and begin signing</div>
-    </div>
+  <!-- Translated text -->
+  <div id="translation-section">
+    <div id="xlate">Translated text comes here</div>
+  </div>
 
+  <!-- Conversation history -->
+  <div id="history-section"></div>
+
+  <!-- Waveform -->
+  <div id="wave-section">
     <canvas id="wave"></canvas>
   </div>
 
-  <!-- Right: conversation -->
-  <div id="right">
-    <div class="section-label">Conversation</div>
-    <div id="history">
-      <div class="empty-msg" id="empty-msg">
-        <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+  <!-- Footer info -->
+  <div id="footer-info">
+    <span id="timestamp">—</span>
+    <span id="signs-count">0 signs read</span>
+  </div>
+
+  <!-- Input bar -->
+  <div id="input-bar">
+    <div id="reply-wrap">
+      <textarea id="reply-input" placeholder="Type your reply..." rows="1"></textarea>
+      <button id="mic-btn" title="Voice input">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="9" y="2" width="6" height="11" rx="3"/>
+          <path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/>
         </svg>
-        <p>Your conversation will appear here as you sign and respond</p>
-      </div>
+      </button>
     </div>
-    <div id="reply-area">
-      <textarea id="reply-input" placeholder="Type your reply here…" rows="3"></textarea>
-      <div class="reply-footer">
-        <span class="reply-hint">Ctrl + Enter to send</span>
-        <button id="send-btn" onclick="sendReply()">Send Reply</button>
-      </div>
-    </div>
+
+    <button class="action-btn" onclick="copyLastSigned()" title="Copy signed text">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+      </svg>
+    </button>
+
+    <button id="send-btn" onclick="sendReply()" title="Send reply">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
   </div>
 </div>
 
@@ -387,68 +598,60 @@
     <button class="drawer-close" onclick="toggleDrawer()">×</button>
   </div>
   <div class="drawer-body">
-
-    <!-- Backend status -->
     <div class="backend-status" id="backend-status">
-      <div class="backend-dot"></div>
+      <div class="be-dot"></div>
       <span id="backend-status-text">Checking backend…</span>
     </div>
-
-    <!-- Record a new sign -->
-    <div class="record-section">
-      <div class="record-label">Record a sign</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="drawer-section-label">Record a sign</div>
       <div class="sign-name-row">
         <input type="text" id="sign-name-input" placeholder="Sign name (e.g. HELLO)" maxlength="30">
       </div>
       <div class="record-controls">
         <button id="capture-btn" onclick="captureOneSample()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg>
-          Capture Sample
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg>
+          Capture
         </button>
-        <button id="auto-btn" onclick="autoRecord()">Auto (10×)</button>
+        <button id="auto-btn" onclick="autoRecord()">Auto 10×</button>
       </div>
       <div class="sample-progress">
         <div id="sample-bar-wrap"><div id="sample-bar"></div></div>
-        <span id="sample-count-label">0 samples</span>
+        <span id="sample-count-label">0 / 10</span>
       </div>
     </div>
-
     <div id="accuracy-badge"></div>
     <hr class="drawer-divider">
-
-    <!-- Trained signs list -->
-    <div class="record-label">Trained signs</div>
+    <div class="drawer-section-label">Trained signs</div>
     <div class="signs-list" id="signs-list">
-      <p class="empty-signs">No signs trained yet.<br>Record at least 10 samples per sign for good accuracy.</p>
+      <p class="empty-signs">No signs yet.<br>Record 10+ samples per sign for best accuracy.</p>
     </div>
   </div>
 </div>
 
 <div id="toast"></div>
 
-<!-- ── MEDIAPIPE (CDN) ───────────────────────────────── -->
+<!-- ── MEDIAPIPE ─────────────────────────────────────── -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
 <script>
 // ════════════════════════════════════════════════════════
-//  CONFIG + STATE
+//  STATE
 // ════════════════════════════════════════════════════════
-let apiKey       = '';          // Mistral key (optional fallback)
+let apiKey       = '';
 let backendUrl   = 'http://localhost:8000';
 let backendReady = false;
 
 let handsPresent     = false;
 let translating      = false;
 let lastCapture      = 0;
-const INTERVAL       = 2500;   // ms between recognition attempts
+const INTERVAL       = 2500;
 let pendingText      = '';
 let mpReady          = false;
-let currentLandmarks = null;   // latest 21-landmark snapshot from MediaPipe
+let currentLandmarks = null;
+let signsReadCount   = 0;
 
-// Auto-record state
-let autoRecording   = false;
-let autoTimer       = null;
+let autoRecording = false, autoTimer = null;
 let currentSignSamples = 0;
 const TARGET_SAMPLES   = 10;
 
@@ -463,20 +666,23 @@ const appEl        = document.getElementById('app');
 const keyInput     = document.getElementById('key-input');
 const backendInput = document.getElementById('backend-url-input');
 const videoEl      = document.getElementById('video');
-const camBox       = document.getElementById('cam-box');
+const camInner     = document.getElementById('cam-inner');
 const camPlaceholder = document.getElementById('cam-placeholder');
 const camMsg       = document.getElementById('cam-msg');
+const camHint      = document.getElementById('cam-hint');
+const camCard      = document.getElementById('cam-card');
 const xlateEl      = document.getElementById('xlate');
-const chipEl       = document.getElementById('chip');
+const chipDot      = document.getElementById('chip-dot');
 const chipLabel    = document.getElementById('chip-label');
 const sourceBadge  = document.getElementById('source-badge');
 const waveCanvas   = document.getElementById('wave');
 const wCtx         = waveCanvas.getContext('2d');
-const historyEl    = document.getElementById('history');
-const emptyMsgEl   = document.getElementById('empty-msg');
+const historyEl    = document.getElementById('history-section');
 const replyInput   = document.getElementById('reply-input');
+const timestampEl  = document.getElementById('timestamp');
+const signsCountEl = document.getElementById('signs-count');
 const trainDrawer  = document.getElementById('train-drawer');
-const trainBtn     = document.getElementById('train-btn');
+const trainToggle  = document.getElementById('train-toggle');
 const signNameInput = document.getElementById('sign-name-input');
 const captureBtn   = document.getElementById('capture-btn');
 const autoBtn      = document.getElementById('auto-btn');
@@ -492,12 +698,13 @@ const backendStatusText = document.getElementById('backend-status-text');
 // ════════════════════════════════════════════════════════
 function startApp() {
   apiKey     = keyInput.value.trim();
-  backendUrl = (backendInput.value.trim() || 'http://localhost:8000').replace(/\/$/, '');
-
+  backendUrl = (backendInput.value.trim() || 'http://localhost:8001').replace(/\/$/, '');
   apiBanner.classList.add('hidden');
-  appEl.style.display = 'grid';
+  appEl.style.display = 'flex';
   initCamera();
   checkBackend();
+  updateTimestamp();
+  setInterval(updateTimestamp, 30000);
   if (!wRaf) wRaf = requestAnimationFrame(animateWave);
 }
 
@@ -509,8 +716,17 @@ function showBanner() {
 keyInput.addEventListener('keydown', e => { if (e.key === 'Enter') startApp(); });
 backendInput.addEventListener('keydown', e => { if (e.key === 'Enter') startApp(); });
 
+function updateTimestamp() {
+  const now = new Date();
+  const h = now.getHours(), m = now.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hh = h % 12 || 12;
+  const mm = String(m).padStart(2, '0');
+  timestampEl.textContent = `${hh}:${mm} ${ampm}`;
+}
+
 // ════════════════════════════════════════════════════════
-//  BACKEND HEALTH CHECK
+//  BACKEND
 // ════════════════════════════════════════════════════════
 async function checkBackend() {
   try {
@@ -521,15 +737,11 @@ async function checkBackend() {
       backendStatusEl.classList.add('connected');
       backendStatusText.textContent = `Connected — ${d.signs_trained} sign${d.signs_trained !== 1 ? 's' : ''} trained`;
       refreshSignsList();
-    } else {
-      setBackendDisconnected();
-    }
-  } catch {
-    setBackendDisconnected();
-  }
+    } else setBackendOff();
+  } catch { setBackendOff(); }
 }
 
-function setBackendDisconnected() {
+function setBackendOff() {
   backendReady = false;
   backendStatusEl.classList.remove('connected');
   backendStatusText.textContent = 'Backend not reachable — using Mistral only';
@@ -541,12 +753,9 @@ function setBackendDisconnected() {
 async function initCamera() {
   if (typeof Hands !== 'undefined' && typeof Camera !== 'undefined') {
     try {
-      const hands = new Hands({
-        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${f}`
-      });
+      const hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${f}` });
       hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
       hands.onResults(onHandResults);
-
       const mpCam = new Camera(videoEl, {
         onFrame: async () => { if (mpReady) await hands.send({ image: videoEl }); },
         width: 640, height: 800
@@ -555,12 +764,8 @@ async function initCamera() {
       mpReady = true;
       camPlaceholder.style.display = 'none';
       return;
-    } catch (err) {
-      console.warn('MediaPipe init failed, falling back:', err);
-    }
+    } catch (err) { console.warn('MediaPipe fallback:', err); }
   }
-
-  // Fallback: raw getUserMedia
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 800 } }
@@ -568,19 +773,13 @@ async function initCamera() {
     videoEl.srcObject = stream;
     await new Promise(r => videoEl.addEventListener('loadedmetadata', r, { once: true }));
     camPlaceholder.style.display = 'none';
-    // Without MediaPipe landmarks, fall through to Mistral-only mode
     setInterval(() => {
       handsPresent = true;
-      camBox.classList.add('lit');
-      wTarget = 12;
-      setChip('reading');
+      setHandsUI(true);
       const now = Date.now();
-      if (!translating && now - lastCapture >= INTERVAL) {
-        lastCapture = now;
-        recognizeFrame();
-      }
+      if (!translating && now - lastCapture >= INTERVAL) { lastCapture = now; recognizeFrame(); }
     }, INTERVAL);
-  } catch (err) {
+  } catch {
     camMsg.textContent = 'Camera unavailable — check permissions';
     showToast('Camera access denied. Please allow camera and reload.');
   }
@@ -588,40 +787,29 @@ async function initCamera() {
 
 function onHandResults(results) {
   const detected = !!(results.multiHandLandmarks && results.multiHandLandmarks.length > 0);
-
-  // Store latest landmarks for training and recognition
-  if (detected && results.multiHandLandmarks[0]) {
-    currentLandmarks = results.multiHandLandmarks[0].map(lm => [lm.x, lm.y, lm.z]);
-  } else {
-    currentLandmarks = null;
-  }
-
-  if (detected !== handsPresent) {
-    handsPresent = detected;
-    camBox.classList.toggle('lit', detected);
-    wTarget = detected ? 12 : 0;
-    if (!detected && !translating) setChip('ready');
-    else if (detected && !translating) setChip('reading');
-  }
-
+  currentLandmarks = detected ? results.multiHandLandmarks[0].map(lm => [lm.x, lm.y, lm.z]) : null;
+  if (detected !== handsPresent) { handsPresent = detected; setHandsUI(detected); }
   if (handsPresent && !translating) {
     const now = Date.now();
-    if (now - lastCapture >= INTERVAL) {
-      lastCapture = now;
-      recognizeFrame();
-    }
+    if (now - lastCapture >= INTERVAL) { lastCapture = now; recognizeFrame(); }
   }
 }
 
+function setHandsUI(on) {
+  wTarget = on ? 12 : 0;
+  if (!on && !translating) setChip('ready', 'Ready');
+  else if (on && !translating) setChip('reading', 'Reading signs');
+}
+
 // ════════════════════════════════════════════════════════
-//  RECOGNITION — backend first, Mistral fallback
+//  RECOGNITION
 // ════════════════════════════════════════════════════════
 async function recognizeFrame() {
   if (translating) return;
   translating = true;
-  setChip('interpreting');
+  setChip('interpreting', 'Interpreting…');
 
-  // ── 1. Try local backend with landmarks ──
+  // 1. Backend (landmarks)
   if (backendReady && currentLandmarks) {
     try {
       const r = await fetch(`${backendUrl}/recognize`, {
@@ -635,53 +823,50 @@ async function recognizeFrame() {
         if (d.ready && d.confidence >= 0.60) {
           showTranslation(d.sign, 'backend', d.confidence);
           translating = false;
-          setChip(handsPresent ? 'reading' : 'ready');
+          setChip(handsPresent ? 'reading' : 'ready', handsPresent ? 'Reading signs' : 'Ready');
           return;
         }
       }
-    } catch { /* fall through to Mistral */ }
+    } catch { /* fall to Mistral */ }
   }
 
-  // ── 2. Mistral vision fallback ──
+  // 2. Mistral fallback
   if (!apiKey) {
     translating = false;
-    setChip(handsPresent ? 'reading' : 'ready');
+    setChip(handsPresent ? 'reading' : 'ready', handsPresent ? 'Reading signs' : 'Ready');
     return;
   }
   await mistralCapture();
 }
 
 async function mistralCapture() {
-  const cw = videoEl.videoWidth  || 640;
-  const ch = videoEl.videoHeight || 800;
-  const offscreen = document.createElement('canvas');
-  offscreen.width = cw; offscreen.height = ch;
-  offscreen.getContext('2d').drawImage(videoEl, 0, 0, cw, ch);
-  const b64 = offscreen.toDataURL('image/jpeg', 0.82).split(',')[1];
-
+  const cw = videoEl.videoWidth || 640, ch = videoEl.videoHeight || 800;
+  const off = document.createElement('canvas');
+  off.width = cw; off.height = ch;
+  off.getContext('2d').drawImage(videoEl, 0, 0, cw, ch);
+  const b64 = off.toDataURL('image/jpeg', 0.82).split(',')[1];
   try {
     const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'pixtral-large-latest',
-        max_tokens: 150,
+        model: 'pixtral-large-latest', max_tokens: 150,
         messages: [{ role: 'user', content: [
           { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } },
-          { type: 'text', text: 'You are helping a deaf person communicate with a hearing person in real time. Look at this image. If you can clearly see hands making ISL (Indian Sign Language) signs, output ONLY the English words being signed — no explanation, no punctuation beyond what is natural, just the words. If there are no hands clearly visible, the image is blurry, or you cannot confidently determine what is being signed, output exactly one word: WAITING' }
+          { type: 'text', text: 'You are helping a deaf person communicate with a hearing person. Look at this image. If hands are making ISL (Indian Sign Language) signs, output ONLY the English words being signed — no explanation, just the words. If unclear or no hands, output exactly: WAITING' }
         ]}]
       })
     });
-    if (res.status === 401) { showToast('Invalid Mistral API key.'); return; }
+    if (res.status === 401) { showToast('Invalid Mistral key.'); return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data  = await res.json();
+    const data = await res.json();
     const reply = data.choices?.[0]?.message?.content?.trim() ?? 'WAITING';
     if (reply !== 'WAITING' && reply.length > 0) showTranslation(reply, 'mistral', 1.0);
   } catch (err) {
     if (err.name !== 'AbortError') showToast('Translation failed — check connection.');
   } finally {
     translating = false;
-    setChip(handsPresent ? 'reading' : 'ready');
+    setChip(handsPresent ? 'reading' : 'ready', handsPresent ? 'Reading signs' : 'Ready');
   }
 }
 
@@ -690,14 +875,18 @@ async function mistralCapture() {
 // ════════════════════════════════════════════════════════
 function showTranslation(text, source, confidence) {
   xlateEl.textContent = text;
-  xlateEl.classList.remove('idle', 'low-conf');
+  xlateEl.classList.remove('low-conf');
+  xlateEl.classList.add('active');
   if (confidence < 0.75) xlateEl.classList.add('low-conf');
   pendingText = text;
+  signsReadCount++;
+  signsCountEl.textContent = `${signsReadCount} sign${signsReadCount !== 1 ? 's' : ''} read`;
 
-  sourceBadge.textContent = source === 'backend' ? `Backend ${Math.round(confidence * 100)}%` : 'Mistral';
+  sourceBadge.textContent = source === 'backend' ? `Local ${Math.round(confidence * 100)}%` : 'Mistral';
   sourceBadge.className   = `source-badge ${source}`;
-  // Fix: reassign id after className wipe
-  sourceBadge.id = 'source-badge';
+  sourceBadge.id          = 'source-badge';
+
+  camHint.textContent = text;
 
   wTarget = 20;
   setTimeout(() => { wTarget = handsPresent ? 12 : 0; }, 700);
@@ -707,10 +896,9 @@ function showTranslation(text, source, confidence) {
 //  CONVERSATION
 // ════════════════════════════════════════════════════════
 function addBubble(who, text) {
-  emptyMsgEl.style.display = 'none';
   const row = document.createElement('div');
   row.className = `bubble-row ${who}`;
-  row.innerHTML = `<div class="bubble-label">${who === 'signed' ? 'Signed' : 'Reply'}</div><div class="bubble">${esc(text)}</div>`;
+  row.innerHTML = `<div class="bubble-lbl">${who === 'signed' ? 'Signed' : 'Reply'}</div><div class="bubble">${esc(text)}</div>`;
   historyEl.appendChild(row);
   historyEl.scrollTop = historyEl.scrollHeight;
 }
@@ -721,97 +909,91 @@ function sendReply() {
   if (pendingText) { addBubble('signed', pendingText); pendingText = ''; }
   addBubble('hearer', text);
   replyInput.value = '';
-  xlateEl.textContent = 'Continue signing…';
-  xlateEl.classList.add('idle');
+  replyInput.style.height = 'auto';
+  xlateEl.textContent = 'Translated text comes here';
+  xlateEl.classList.remove('active', 'low-conf');
+  camHint.textContent = 'Keep your face in centre';
+}
+
+function copyLastSigned() {
+  const text = pendingText || xlateEl.textContent;
+  if (!text || text === 'Translated text comes here') { showToast('Nothing to copy yet.'); return; }
+  navigator.clipboard?.writeText(text).then(() => showToast('Copied!')).catch(() => showToast('Copy failed.'));
 }
 
 replyInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReply(); }
 });
 
+// Auto-grow textarea
+replyInput.addEventListener('input', () => {
+  replyInput.style.height = 'auto';
+  replyInput.style.height = Math.min(replyInput.scrollHeight, 88) + 'px';
+});
+
+// ════════════════════════════════════════════════════════
+//  STATUS CHIP
+// ════════════════════════════════════════════════════════
+function setChip(state, label) {
+  chipLabel.textContent = label;
+  chipDot.classList.toggle('pulse', state !== 'ready');
+  chipDot.style.background = state === 'ready' ? '#C4B8B0' : '#FE9151';
+}
+
 // ════════════════════════════════════════════════════════
 //  TRAINING DRAWER
 // ════════════════════════════════════════════════════════
 function toggleDrawer() {
   const open = trainDrawer.classList.toggle('open');
-  trainBtn.classList.toggle('active', open);
+  trainToggle.classList.toggle('active', open);
   if (open) { checkBackend(); refreshSignsList(); }
 }
 
-function getSignName() {
-  return signNameInput.value.trim().toUpperCase();
-}
-
-function updateSampleProgress(count, total) {
-  const pct = Math.min((count / total) * 100, 100);
-  sampleBar.style.width = `${pct}%`;
-  sampleCountLabel.textContent = `${count} / ${total} samples`;
-  currentSignSamples = count;
-}
-
 async function captureOneSample() {
-  if (!currentLandmarks) { showToast('No hand detected — position your hand in frame first.'); return; }
-  const sign = getSignName();
+  if (!currentLandmarks) { showToast('No hand detected — show your hand first.'); return; }
+  const sign = signNameInput.value.trim().toUpperCase();
   if (!sign) { showToast('Enter a sign name first.'); return; }
-  if (!backendReady) { showToast('Backend not connected. Start the server and click Settings.'); return; }
-
+  if (!backendReady) { showToast('Backend not connected.'); return; }
   captureBtn.disabled = true;
   try {
     const r = await fetch(`${backendUrl}/samples`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sign, landmarks: currentLandmarks })
     });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if (!r.ok) throw new Error();
     const d = await r.json();
-    updateSampleProgress(d.samples, TARGET_SAMPLES);
+    const pct = Math.min((d.samples / TARGET_SAMPLES) * 100, 100);
+    sampleBar.style.width = `${pct}%`;
+    sampleCountLabel.textContent = `${d.samples} / ${TARGET_SAMPLES}`;
     if (d.accuracy != null) {
-      accuracyBadge.textContent = `Model accuracy: ${Math.round(d.accuracy * 100)}%`;
+      accuracyBadge.textContent = `Accuracy: ${Math.round(d.accuracy * 100)}%`;
       accuracyBadge.classList.add('visible');
     }
     refreshSignsList();
-  } catch (err) {
-    showToast('Failed to save sample — is the backend running?');
-  } finally {
-    captureBtn.disabled = false;
-  }
+  } catch { showToast('Failed — is the backend running?'); }
+  finally { captureBtn.disabled = false; }
 }
 
 function autoRecord() {
   if (autoRecording) {
-    // Stop early
-    clearInterval(autoTimer);
-    autoRecording = false;
-    autoBtn.textContent = 'Auto (10×)';
-    autoBtn.classList.remove('recording');
-    return;
+    clearInterval(autoTimer); autoRecording = false;
+    autoBtn.textContent = 'Auto 10×'; autoBtn.classList.remove('recording'); return;
   }
-  const sign = getSignName();
+  const sign = signNameInput.value.trim().toUpperCase();
   if (!sign) { showToast('Enter a sign name first.'); return; }
   if (!backendReady) { showToast('Backend not connected.'); return; }
-
-  autoRecording = true;
-  autoBtn.textContent = 'Stop';
-  autoBtn.classList.add('recording');
-
-  let captured = 0;
-  updateSampleProgress(0, TARGET_SAMPLES);
-
+  autoRecording = true; autoBtn.textContent = 'Stop'; autoBtn.classList.add('recording');
+  sampleBar.style.width = '0%'; sampleCountLabel.textContent = `0 / ${TARGET_SAMPLES}`;
+  let done = 0;
   autoTimer = setInterval(async () => {
-    if (!autoRecording) return;
-    if (!currentLandmarks) return; // skip frames where hand not visible
-
-    await captureOneSample();
-    captured++;
-
-    if (captured >= TARGET_SAMPLES) {
-      clearInterval(autoTimer);
-      autoRecording = false;
-      autoBtn.textContent = 'Auto (10×)';
-      autoBtn.classList.remove('recording');
-      showToast(`Recorded ${captured} samples for "${sign}"`);
+    if (!autoRecording || !currentLandmarks) return;
+    await captureOneSample(); done++;
+    if (done >= TARGET_SAMPLES) {
+      clearInterval(autoTimer); autoRecording = false;
+      autoBtn.textContent = 'Auto 10×'; autoBtn.classList.remove('recording');
+      showToast(`Recorded ${done} samples for "${sign}"`);
     }
-  }, 500); // capture every 500ms → 10 samples in ~5 s
+  }, 500);
 }
 
 async function refreshSignsList() {
@@ -821,26 +1003,22 @@ async function refreshSignsList() {
     if (!r.ok) return;
     const d = await r.json();
     renderSignsList(d.signs);
-    backendStatusEl.classList.add('connected');
     backendStatusText.textContent = `Connected — ${d.total} sign${d.total !== 1 ? 's' : ''} trained`;
-  } catch { setBackendDisconnected(); }
+  } catch { setBackendOff(); }
 }
 
 function renderSignsList(signs) {
   const entries = Object.entries(signs);
-  if (entries.length === 0) {
-    signsList.innerHTML = '<p class="empty-signs">No signs trained yet.<br>Record at least 10 samples per sign for good accuracy.</p>';
+  if (!entries.length) {
+    signsList.innerHTML = '<p class="empty-signs">No signs yet.<br>Record 10+ samples per sign for best accuracy.</p>';
     return;
   }
-  signsList.innerHTML = entries
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([name, count]) => `
-      <div class="sign-item">
-        <span class="sign-name-chip">${esc(name)}</span>
-        <span class="sign-sample-count">${count} sample${count !== 1 ? 's' : ''}</span>
-        <button class="sign-del-btn" onclick="deleteSign('${esc(name)}')" title="Delete">×</button>
-      </div>`)
-    .join('');
+  signsList.innerHTML = entries.sort((a,b) => a[0].localeCompare(b[0])).map(([name, count]) => `
+    <div class="sign-item">
+      <span class="sign-name-chip">${esc(name)}</span>
+      <span class="sign-sample-count">${count} sample${count !== 1 ? 's' : ''}</span>
+      <button class="sign-del-btn" onclick="deleteSign('${esc(name)}')" title="Delete">×</button>
+    </div>`).join('');
 }
 
 async function deleteSign(name) {
@@ -852,37 +1030,29 @@ async function deleteSign(name) {
   } catch { showToast('Backend not reachable.'); }
 }
 
-// When user switches sign name, reset the progress bar
 signNameInput.addEventListener('input', () => {
-  updateSampleProgress(0, TARGET_SAMPLES);
+  sampleBar.style.width = '0%';
+  sampleCountLabel.textContent = `0 / ${TARGET_SAMPLES}`;
   accuracyBadge.classList.remove('visible');
 });
 
 // ════════════════════════════════════════════════════════
-//  STATUS CHIP
-// ════════════════════════════════════════════════════════
-function setChip(state) {
-  chipEl.className = `chip ${state}`;
-  chipLabel.textContent = { ready: 'Ready', reading: 'Reading', interpreting: 'Interpreting' }[state] ?? state;
-}
-
-// ════════════════════════════════════════════════════════
-//  WAVEFORM
+//  WAVEFORM — peach accent colour to match Figma
 // ════════════════════════════════════════════════════════
 function animateWave() {
-  const W = waveCanvas.parentElement ? waveCanvas.parentElement.clientWidth - 38 : 300;
-  const H = 38;
+  const W = waveCanvas.parentElement ? waveCanvas.parentElement.clientWidth - 34 : 320;
+  const H = 24;
   if (waveCanvas.width !== W)  waveCanvas.width  = W;
   if (waveCanvas.height !== H) waveCanvas.height = H;
   wCtx.clearRect(0, 0, W, H);
   wAmp += (wTarget - wAmp) * 0.07;
-  const midY = H / 2;
+
   if (wAmp > 0.5) {
-    wCtx.beginPath(); wCtx.strokeStyle = 'rgba(94,232,160,0.18)'; wCtx.lineWidth = 5; wCtx.lineJoin = 'round';
-    drawWavePath(W, midY); wCtx.stroke();
+    wCtx.beginPath(); wCtx.strokeStyle = 'rgba(245,160,122,0.2)'; wCtx.lineWidth = 5; wCtx.lineJoin = 'round';
+    drawWavePath(W, H / 2); wCtx.stroke();
   }
-  wCtx.beginPath(); wCtx.strokeStyle = '#5EE8A0'; wCtx.lineWidth = 1.8; wCtx.lineJoin = 'round';
-  drawWavePath(W, midY); wCtx.stroke();
+  wCtx.beginPath(); wCtx.strokeStyle = '#F5A07A'; wCtx.lineWidth = 1.8; wCtx.lineJoin = 'round';
+  drawWavePath(W, H / 2); wCtx.stroke();
   if (wAmp > 0.3) wPhase += 0.048;
   wRaf = requestAnimationFrame(animateWave);
 }
@@ -910,11 +1080,11 @@ function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 5000);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 4000);
 }
 
 window.addEventListener('resize', () => {
-  if (waveCanvas.parentElement) waveCanvas.width = waveCanvas.parentElement.clientWidth - 38;
+  if (waveCanvas.parentElement) waveCanvas.width = waveCanvas.parentElement.clientWidth - 34;
 });
 </script>
 </body>

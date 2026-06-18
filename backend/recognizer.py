@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 import json
 import os
 import pickle
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import LabelEncoder
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "samples.json")
 MODEL_FILE = os.path.join(os.path.dirname(__file__), "data", "model.pkl")
