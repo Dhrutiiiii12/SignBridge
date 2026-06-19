@@ -1,152 +1,153 @@
 #!/usr/bin/env python3
 """
-seed_isl.py — Pre-populate SignBridge backend with ISL (Indian Sign Language) poses.
+seed_isl.py — Pre-populate SignBridge backend with ISL hand-landmark templates.
 
-Generates 15 synthetic landmark samples per sign (with small random noise) and
-POSTs them to the /samples endpoint so the KNN model is ready without any manual
-recording session.
+Coordinates are calibrated to real MediaPipe Hands normalized output for a
+right hand held palm-facing-camera. Higher noise + more samples gives the KNN
+classifier much better coverage of the real data distribution.
 
 Usage:
-    python3 seed_isl.py                          # uses http://localhost:8001
-    python3 seed_isl.py --backend http://localhost:8001
-    python3 seed_isl.py --signs A B HELLO        # seed specific signs only
-    python3 seed_isl.py --samples 20             # more samples per sign
+    python3 seed_isl.py                          # localhost:8000
+    python3 seed_isl.py --backend http://localhost:8000
+    python3 seed_isl.py --signs A B HELLO        # specific signs only
+    python3 seed_isl.py --samples 40             # override sample count
 """
 from __future__ import annotations
 import argparse, json, sys, time
 import urllib.request, urllib.error
 import numpy as np
 
-NOISE_STD  = 0.007   # Gaussian noise std-dev added to each sample
-N_SAMPLES  = 15      # samples generated per sign
+# Higher noise → samples spread wider → KNN generalises to real hands.
+# The old value (0.007) clustered samples so tightly that real camera data
+# never fell inside any cluster, making the classifier always predict P or H.
+NOISE_STD = 0.042
+N_SAMPLES  = 30
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Coordinate system
-#  MediaPipe image-normalised space: x∈[0,1] left→right, y∈[0,1] top→bottom.
-#  Hand is centred horizontally (x≈0.5), wrist near bottom (y≈0.855).
-#  Landmarks: 0=wrist  1-4=thumb(CMC,MCP,IP,TIP)  5-8=index(MCP,PIP,DIP,TIP)
-#             9-12=middle  13-16=ring  17-20=pinky
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── Hand skeleton ────────────────────────────────────────────────────────────
+# Normalized image coordinates [0,1] for a right hand, palm facing camera.
+# Wrist → middle-MCP distance ≈ 0.194 (this becomes the normalisation scale).
+# Calibrated against real MediaPipe output on actual video frames.
 
-# Fixed anchor positions
-_W   = [0.500, 0.855]  # wrist
-_TC  = [0.440, 0.808]  # thumb CMC
-_TM  = [0.405, 0.778]  # thumb MCP
+W    = [0.500, 0.780]   # landmark  0  wrist
+TC   = [0.437, 0.731]   # landmark  1  thumb CMC
+TM   = [0.373, 0.681]   # landmark  2  thumb MCP
+
+I_MCP = [0.440, 0.608]  # landmark  5  index  MCP
+M_MCP = [0.500, 0.586]  # landmark  9  middle MCP  (reference; dist to wrist = 0.194)
+R_MCP = [0.558, 0.608]  # landmark 13  ring   MCP
+P_MCP = [0.609, 0.636]  # landmark 17  pinky  MCP
+
 
 def _thumb(state: str) -> list:
-    """Return [IP, TIP] for thumb. state: ext | curl | side | up | across"""
-    return {
-        'ext':    [[0.370, 0.748], [0.338, 0.718]],  # pointing outward-up
-        'curl':   [[0.395, 0.762], [0.412, 0.773]],  # tucked toward palm
-        'side':   [[0.378, 0.755], [0.358, 0.740]],  # A-sign: alongside fist
-        'up':     [[0.380, 0.730], [0.363, 0.698]],  # thumbs-up
-        'across': [[0.418, 0.752], [0.448, 0.742]],  # S-sign: across front of fist
-        'tucked': [[0.408, 0.760], [0.430, 0.758]],  # M/N: hidden under fingers
-    }.get(state, [[0.370, 0.748], [0.338, 0.718]])
+    """Return [IP, TIP] (landmarks 3, 4)."""
+    table = {
+        'ext':    [[0.308, 0.634], [0.246, 0.590]],  # extended outward-up
+        'side':   [[0.355, 0.649], [0.328, 0.625]],  # A: beside index knuckle
+        'curl':   [[0.393, 0.653], [0.434, 0.645]],  # folded toward palm
+        'up':     [[0.371, 0.614], [0.358, 0.540]],  # thumbs-up
+        'across': [[0.437, 0.640], [0.476, 0.628]],  # S: wraps over fist top
+        'tucked': [[0.421, 0.655], [0.457, 0.647]],  # M/N: hidden under fingers
+        'half':   [[0.336, 0.647], [0.294, 0.620]],  # C/O: curved but open
+    }
+    return table.get(state, table['ext'])
 
-# Fixed MCP positions for each finger
-_I_MCP = [0.448, 0.722]
-_M_MCP = [0.500, 0.715]   # reference — sets the normalisation scale
-_R_MCP = [0.550, 0.720]
-_P_MCP = [0.590, 0.735]
 
-def _finger(mcp: list, state: str, spread_x: float = 0.0) -> list:
+def _joints(mcp: list, state: str, sp: float = 0.0) -> list:
     """
-    Return [MCP, PIP, DIP, TIP] for a finger.
-    state: ext | curl | bent | horiz | down | half
-    spread_x: extra x-offset applied to PIP/DIP/TIP (used for V-sign spread)
+    Return [MCP, PIP, DIP, TIP] for one finger.
+    sp (spread) shifts PIP/DIP/TIP laterally for V/R signs.
     """
     x, y = mcp
-    sx = spread_x
-    states = {
-        'ext':   [mcp, [x+sx*0.3, y-0.072], [x+sx*0.65, y-0.138], [x+sx, y-0.206]],
-        'curl':  [mcp, [x-0.002,  y-0.048], [x+0.002,   y-0.050], [x+0.004, y-0.038]],
-        'bent':  [mcp, [x,        y-0.075], [x+0.022,   y-0.112], [x+0.040, y-0.128]],  # hook
-        'horiz': [mcp, [x+0.042,  y-0.018], [x+0.085,   y-0.006], [x+0.128, y+0.004]],  # sideways
-        'down':  [mcp, [x,        y+0.058], [x,         y+0.115], [x,       y+0.170]],  # pointing down
-        'half':  [mcp, [x,        y-0.062], [x+0.010,   y-0.095], [x+0.016, y-0.115]],  # slight bend
-        'tight': [mcp, [x+0.002,  y-0.030], [x+0.003,   y-0.030], [x+0.003, y-0.022]],  # very tight curl
-    }
-    return states.get(state, states['ext'])
+    table = {
+        #          PIP                    DIP                    TIP
+        'ext':   [[x+sp*.33, y-.085], [x+sp*.67, y-.166], [x+sp,    y-.243]],
+        'curl':  [[x+.002,   y-.048], [x+.014,   y-.047], [x+.020,  y-.026]],
+        'bent':  [[x-.001,   y-.074], [x+.030,   y-.107], [x+.054,  y-.118]],
+        'horiz': [[x+.060,   y-.013], [x+.119,   y-.003], [x+.171,  y+.007]],
+        'down':  [[x+.003,   y+.063], [x+.003,   y+.126], [x+.003,  y+.182]],
+        'half':  [[x+.004,   y-.061], [x+.019,   y-.093], [x+.031,  y-.109]],
+        'tight': [[x+.004,   y-.034], [x+.007,   y-.030], [x+.009,  y-.019]],
+    }[state]
+    pip, dip, tip = table
+    return [mcp, pip, dip, tip]
 
-def _pose(t, i, m, r, p, i_sx=0.0, m_sx=0.0, r_sx=0.0):
-    """Build a 21-landmark list from thumb+finger states."""
-    ip, it = _thumb(t)
-    fi = _finger(_I_MCP, i, i_sx)
-    fm = _finger(_M_MCP, m, m_sx)
-    fr = _finger(_R_MCP, r, r_sx)
-    fp = _finger(_P_MCP, p)
-    return [_W, _TC, _TM, ip, it, *fi, *fm, *fr, *fp]
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  ISL Pose Library
-#  References: ISLRTC (Indian Sign Language Research & Training Centre) guidelines
-# ─────────────────────────────────────────────────────────────────────────────
+def _pose(t, i, m, r, p, i_sp=0., m_sp=0., r_sp=0.):
+    """Build full 21-landmark list from thumb state + four finger states."""
+    ti, tt = _thumb(t)
+    return [
+        W, TC, TM, ti, tt,
+        *_joints(I_MCP, i, i_sp),
+        *_joints(M_MCP, m, m_sp),
+        *_joints(R_MCP, r, r_sp),
+        *_joints(P_MCP, p),
+    ]
+
+
+# ─── ISL Pose library ─────────────────────────────────────────────────────────
 ISL_POSES: dict[str, list] = {
 
-    # ── 26 ISL Alphabet letters ───────────────────────────────────────────────
-    #     thumb            index   middle  ring    pinky
-    'A': _pose('side',   'curl',  'curl',  'curl',  'curl'),      # fist, thumb at side
-    'B': _pose('curl',   'ext',   'ext',   'ext',   'ext'),       # 4 fingers up, thumb tucked
-    'C': _pose('half',   'half',  'half',  'half',  'half'),      # curved C
-    'D': _pose('curl',   'ext',   'curl',  'curl',  'curl'),      # index up only
-    'E': _pose('curl',   'bent',  'bent',  'bent',  'bent'),      # all fingers bent
-    'F': _pose('curl',   'bent',  'ext',   'ext',   'ext'),       # OK sign + 3 up
-    'G': _pose('ext',    'horiz', 'curl',  'curl',  'curl'),      # index+thumb sideways
-    'H': _pose('curl',   'horiz', 'horiz', 'curl',  'curl'),      # index+middle sideways
-    'I': _pose('curl',   'curl',  'curl',  'curl',  'ext'),       # pinky up
-    'J': _pose('curl',   'curl',  'curl',  'curl',  'ext'),       # same as I (J adds motion)
-    'K': _pose('ext',    'ext',   'ext',   'curl',  'curl'),      # index+middle+thumb up
-    'L': _pose('ext',    'ext',   'curl',  'curl',  'curl'),      # L: index up + thumb out
-    'M': _pose('tucked', 'tight', 'tight', 'tight', 'curl'),      # 3 fingers over thumb
-    'N': _pose('tucked', 'tight', 'tight', 'curl',  'curl'),      # 2 fingers over thumb
-    'O': _pose('half',   'bent',  'bent',  'bent',  'bent'),      # O shape (thumb meets fingers)
-    'P': _pose('ext',    'down',  'down',  'curl',  'curl'),      # index+middle pointing down
-    'Q': _pose('ext',    'down',  'curl',  'curl',  'curl'),      # index pointing down
-    'R': _pose('curl',   'ext',   'ext',   'curl',  'curl', i_sx=-0.02, m_sx=0.02),  # crossed
-    'S': _pose('across', 'tight', 'tight', 'tight', 'tight'),     # fist thumb across top
-    'T': _pose('side',   'bent',  'curl',  'curl',  'curl'),      # thumb between index+middle
-    'U': _pose('curl',   'ext',   'ext',   'curl',  'curl'),      # index+middle together up
-    'V': _pose('curl',   'ext',   'ext',   'curl',  'curl', i_sx=-0.04, m_sx=0.04),  # peace/V spread
-    'W': _pose('curl',   'ext',   'ext',   'ext',   'curl'),      # 3 fingers up
-    'X': _pose('curl',   'bent',  'curl',  'curl',  'curl'),      # index hooked
-    'Y': _pose('ext',    'curl',  'curl',  'curl',  'ext'),       # thumb+pinky out
-    'Z': _pose('curl',   'ext',   'curl',  'curl',  'curl'),      # index pointing (traces Z)
+    # ── Alphabet ──────────────────────────────────────────────────────────────
+    'A': _pose('side',   'curl',  'curl',  'curl',  'curl'),
+    'B': _pose('curl',   'ext',   'ext',   'ext',   'ext'),
+    'C': _pose('half',   'half',  'half',  'half',  'half'),
+    'D': _pose('half',   'ext',   'curl',  'curl',  'curl'),
+    'E': _pose('curl',   'tight', 'tight', 'tight', 'tight'),
+    'F': _pose('half',   'bent',  'ext',   'ext',   'ext'),
+    'G': _pose('ext',    'horiz', 'curl',  'curl',  'curl'),
+    'H': _pose('curl',   'horiz', 'horiz', 'curl',  'curl'),
+    'I': _pose('curl',   'curl',  'curl',  'curl',  'ext'),
+    'J': _pose('curl',   'curl',  'curl',  'curl',  'ext'),    # same as I (movement-based)
+    'K': _pose('ext',    'ext',   'bent',  'curl',  'curl'),
+    'L': _pose('ext',    'ext',   'curl',  'curl',  'curl'),
+    'M': _pose('tucked', 'tight', 'tight', 'tight', 'curl'),
+    'N': _pose('tucked', 'tight', 'tight', 'curl',  'curl'),
+    'O': _pose('half',   'half',  'half',  'half',  'half'),
+    'P': _pose('ext',    'down',  'down',  'curl',  'curl'),
+    'Q': _pose('ext',    'down',  'curl',  'curl',  'curl'),
+    'R': _pose('curl',   'ext',   'ext',   'curl',  'curl',   i_sp=-0.028, m_sp=0.028),
+    'S': _pose('across', 'curl',  'curl',  'curl',  'curl'),
+    'T': _pose('side',   'bent',  'curl',  'curl',  'curl'),
+    'U': _pose('curl',   'ext',   'ext',   'curl',  'curl'),
+    'V': _pose('curl',   'ext',   'ext',   'curl',  'curl',   i_sp=-0.050, m_sp=0.050),
+    'W': _pose('curl',   'ext',   'ext',   'ext',   'curl'),
+    'X': _pose('curl',   'bent',  'curl',  'curl',  'curl'),
+    'Y': _pose('up',     'curl',  'curl',  'curl',  'ext'),
+    'Z': _pose('curl',   'ext',   'curl',  'curl',  'curl'),
 
-    # ── Common ISL communication signs ────────────────────────────────────────
-    'HELLO':        _pose('ext',    'ext',  'ext',   'ext',   'ext'),      # open palm / wave
-    'NAMASTE':      _pose('ext',    'ext',  'ext',   'ext',   'ext', i_sx=-0.01, m_sx=0.01),  # palms together
-    'THANK_YOU':    _pose('curl',   'ext',  'ext',   'ext',   'ext'),      # 4 fingers from chin forward
-    'YES':          _pose('side',   'curl', 'curl',  'curl',  'curl'),     # nod fist (= A)
-    'NO':           _pose('curl',   'horiz','curl',  'curl',  'curl'),     # index wagging sideways
-    'HELP':         _pose('up',     'curl', 'curl',  'curl',  'curl'),     # thumbs up
-    'PLEASE':       _pose('ext',    'ext',  'ext',   'ext',   'ext', i_sx=0.01),  # flat hand (slight diff from HELLO)
-    'STOP':         _pose('ext',    'half', 'half',  'half',  'half'),     # flat palm, slight bend
-    'SORRY':        _pose('across', 'curl', 'curl',  'curl',  'curl'),     # S on chest
-    'GOOD':         _pose('up',     'curl', 'curl',  'curl',  'curl'),     # thumbs up (= HELP)
-    'BAD':          _pose('curl',   'down', 'curl',  'curl',  'curl'),     # thumb down
-    'PAIN':         _pose('curl',   'bent', 'curl',  'curl',  'curl'),     # X shape (point at body)
-    'WATER':        _pose('curl',   'ext',  'ext',   'ext',   'curl'),     # W shape = three fingers
-    'FOOD':         _pose('curl',   'half', 'half',  'half',  'curl'),     # fingers bunched to mouth
-    'MEDICINE':     _pose('curl',   'curl', 'curl',  'curl',  'curl', m_sx=0.01),  # M fist
-    'DOCTOR':       _pose('curl',   'ext',  'curl',  'curl',  'curl'),     # D shape (= D letter)
-    'HOSPITAL':     _pose('ext',    'ext',  'ext',   'curl',  'curl'),     # H shape
-    'TOILET':       _pose('ext',    'curl', 'curl',  'curl',  'curl'),     # T shape
-    'FAMILY':       _pose('ext',    'half', 'ext',   'ext',   'ext'),      # F shape open
-    'UNDERSTAND':   _pose('curl',   'bent', 'ext',   'ext',   'ext'),      # U + open
-    'REPEAT':       _pose('curl',   'ext',  'ext',   'curl',  'curl', i_sx=-0.03, m_sx=0.03),  # R with spread
-    'WRITE':        _pose('curl',   'bent', 'bent',  'curl',  'curl'),     # writing gesture
-    'READ':         _pose('curl',   'ext',  'ext',   'curl',  'curl', i_sx=0.01),   # like U
-    'NAME':         _pose('curl',   'ext',  'ext',   'curl',  'curl'),     # N/U shape
-    'WHAT':         _pose('ext',    'half', 'half',  'half',  'half'),     # open questioning
-    'WHERE':        _pose('curl',   'ext',  'curl',  'curl',  'curl'),     # index pointing
-    'WHEN':         _pose('ext',    'bent', 'curl',  'curl',  'curl'),     # W bent
-    'HOW':          _pose('curl',   'ext',  'ext',   'ext',   'curl'),     # H + W
+    # ── Common communication signs ─────────────────────────────────────────────
+    'HELLO':      _pose('ext',    'ext',   'ext',   'ext',   'ext'),
+    'NAMASTE':    _pose('ext',    'ext',   'ext',   'ext',   'ext',  i_sp=-0.015, m_sp=0.015),
+    'THANK_YOU':  _pose('curl',   'ext',   'ext',   'ext',   'ext'),
+    'YES':        _pose('side',   'curl',  'curl',  'curl',  'curl'),
+    'NO':         _pose('curl',   'horiz', 'curl',  'curl',  'curl'),
+    'HELP':       _pose('up',     'curl',  'curl',  'curl',  'curl'),
+    'PLEASE':     _pose('ext',    'ext',   'ext',   'ext',   'ext',  i_sp=0.018, m_sp=-0.006),
+    'STOP':       _pose('ext',    'half',  'half',  'half',  'half'),
+    'SORRY':      _pose('across', 'curl',  'curl',  'curl',  'curl'),
+    'GOOD':       _pose('up',     'curl',  'curl',  'curl',  'curl'),
+    'BAD':        _pose('curl',   'down',  'curl',  'curl',  'curl'),
+    'PAIN':       _pose('curl',   'bent',  'curl',  'curl',  'curl'),
+    'WATER':      _pose('curl',   'ext',   'ext',   'ext',   'curl'),
+    'FOOD':       _pose('curl',   'half',  'half',  'half',  'curl'),
+    'MEDICINE':   _pose('curl',   'curl',  'curl',  'curl',  'curl',  m_sp=0.020),
+    'DOCTOR':     _pose('half',   'ext',   'curl',  'curl',  'curl'),
+    'HOSPITAL':   _pose('curl',   'horiz', 'horiz', 'curl',  'curl'),
+    'TOILET':     _pose('ext',    'curl',  'curl',  'curl',  'curl'),
+    'FAMILY':     _pose('ext',    'half',  'ext',   'ext',   'ext'),
+    'UNDERSTAND': _pose('curl',   'bent',  'ext',   'ext',   'ext'),
+    'REPEAT':     _pose('curl',   'ext',   'ext',   'curl',  'curl',  i_sp=-0.033, m_sp=0.033),
+    'WRITE':      _pose('curl',   'bent',  'bent',  'curl',  'curl'),
+    'READ':       _pose('curl',   'ext',   'ext',   'curl',  'curl',  i_sp=0.018),
+    'NAME':       _pose('curl',   'ext',   'ext',   'curl',  'curl'),
+    'WHAT':       _pose('ext',    'half',  'half',  'half',  'half'),
+    'WHERE':      _pose('curl',   'ext',   'curl',  'curl',  'curl'),
+    'WHEN':       _pose('ext',    'bent',  'curl',  'curl',  'curl'),
+    'HOW':        _pose('curl',   'ext',   'ext',   'ext',   'curl'),
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Sample generation + API helpers
-# ─────────────────────────────────────────────────────────────────────────────
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _noisy(landmarks: list, std: float) -> list:
     arr = np.array(landmarks, dtype=np.float32)
@@ -157,7 +158,7 @@ def _noisy(landmarks: list, std: float) -> list:
 
 def _post(backend: str, sign: str, landmarks: list) -> dict:
     data = json.dumps({'sign': sign, 'landmarks': landmarks}).encode()
-    req  = urllib.request.Request(
+    req = urllib.request.Request(
         f'{backend}/samples',
         data=data,
         headers={'Content-Type': 'application/json'},
@@ -172,43 +173,38 @@ def _health(backend: str) -> dict:
         return json.loads(resp.read())
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Main
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--backend', default='http://localhost:8001')
+    ap.add_argument('--backend', default='http://localhost:8000')
     ap.add_argument('--samples', type=int, default=N_SAMPLES)
     ap.add_argument('--noise',   type=float, default=NOISE_STD)
-    ap.add_argument('--signs',   nargs='*',  help='Only seed these signs')
+    ap.add_argument('--signs',   nargs='*', help='Only seed these signs')
     args = ap.parse_args()
 
-    print(f'\nSignBridge ISL Seeder')
-    print(f'Backend : {args.backend}')
-    print(f'Samples : {args.samples} per sign')
-    print()
+    print(f'\nSignBridge ISL Seeder  (noise={args.noise:.3f}, samples={args.samples})')
+    print(f'Backend : {args.backend}\n')
 
     try:
         h = _health(args.backend)
-        print(f'Backend connected — {h["signs_trained"]} signs already in database.\n')
+        print(f'Backend connected — {h["signs_trained"]} signs already stored.\n')
     except Exception as exc:
         print(f'ERROR: Cannot reach backend at {args.backend}\n  {exc}')
-        print('\nStart the server first:')
-        print('  cd backend && python3 -m uvicorn main:app --reload --port 8001\n')
+        print('\nStart the backend first:')
+        print('  cd backend && python3 -m uvicorn main:app --reload --port 8000\n')
         sys.exit(1)
 
     targets = [s.upper() for s in args.signs] if args.signs else list(ISL_POSES.keys())
-    missing = [s for s in targets if s not in ISL_POSES]
-    if missing:
-        print(f'Unknown signs (skipping): {missing}')
+    unknown = [s for s in targets if s not in ISL_POSES]
+    if unknown:
+        print(f'Unknown signs (skipped): {unknown}')
         targets = [s for s in targets if s in ISL_POSES]
 
-    total   = len(targets) * args.samples
-    seeded  = 0
-    failed  = 0
-
-    print(f'Seeding {len(targets)} signs × {args.samples} samples = {total} total landmarks\n')
+    total  = len(targets) * args.samples
+    seeded = 0
+    failed = 0
+    print(f'Seeding {len(targets)} signs × {args.samples} samples = {total} total\n')
 
     for sign in targets:
         base = ISL_POSES[sign]
@@ -220,19 +216,18 @@ def main():
             except Exception:
                 errs  += 1
                 failed += 1
-            time.sleep(0.03)
+            time.sleep(0.025)
 
-        bar = '█' * int(seeded / total * 30) + '░' * (30 - int(seeded / total * 30))
-        ok  = '✓' if errs == 0 else f'✗ {errs} failed'
-        print(f'  {sign:<14} [{bar}]  {ok}')
+        pct = int(seeded / total * 30)
+        bar = '█' * pct + '░' * (30 - pct)
+        status = '✓' if errs == 0 else f'✗ {errs} errors'
+        print(f'  {sign:<14} [{bar}]  {status}')
 
     print(f'\n{"─"*55}')
     print(f'Done.  {seeded}/{total} samples seeded,  {failed} errors.')
-
     try:
         h = _health(args.backend)
-        ready = h.get('model_ready', False)
-        print(f'Backend : {h["signs_trained"]} signs trained,  model ready = {ready}')
+        print(f'Backend: {h["signs_trained"]} signs, model_ready={h["model_ready"]}')
     except Exception:
         pass
     print()
