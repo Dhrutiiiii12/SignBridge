@@ -1,15 +1,1666 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SignBridge</title>
-    <meta name="description" content="Real-time sign language to text communication app." />
-    <meta name="robots" content="noindex, nofollow" />
-    <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Signbridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #FFFFFF;
+      --bg-warm:     #FAF8F5;
+      --bg-input:    #FAF8F5;
+      --accent:      #F9C5B0;
+      --accent-dark: #F5A07A;
+      --accent-pink: #FF9BBE;
+      --text:        #1A1A1A;
+      --text-dim:    #C4B8B0;
+      --text-mid:    #A89B95;
+      --text-muted:  #B0A8A4;
+      --border:      rgba(0,0,0,0.07);
+      --border-soft: rgba(0,0,0,0.05);
+      --shadow-card: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-send: 0 4px 7px rgba(232,132,90,0.30);
+      --send-grad:   linear-gradient(135deg,#FFFBF0 0%,#F9C5B0 46%,#FF9BBE 100%);
+      --cam-grad:    linear-gradient(180deg,rgba(251,213,196,.35) 0%,rgba(253,234,225,.97) 100%);
+    }
+
+    html,body {
+      height: 100%;
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      transition: background .5s ease;
+    }
+    body.warm { background: var(--bg-warm); }
+    body.typing { background: #FFF5EC; }
+
+    /* ── LAUNCH ──────────────────────────────────────── */
+    #launch {
+      position: fixed; inset: 0; z-index: 200;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 0; padding: 40px 32px;
+      animation: launchBg 400ms ease forwards;
+    }
+    @keyframes launchBg { to { background: #FAF8F5; } }
+    #launch.out { animation: launchOut 320ms ease forwards; pointer-events: none; }
+    @keyframes launchOut { to { opacity: 0; transform: translateY(-14px); } }
+    #launch.gone { display: none; }
+
+    .lb { font-family: 'Playfair Display', Georgia, serif; font-size: 44px; font-weight: 600;
+      color: var(--text); letter-spacing: -1px;
+      opacity: 0; transform: translateY(-8px);
+      animation: dropIn 500ms ease-out 60ms forwards; }
+    .lh { font-family: 'Playfair Display', Georgia, serif; font-size: 26px; font-weight: 500;
+      font-style: italic; color: var(--accent-dark); margin-top: 10px;
+      opacity: 0; transform: translateY(-8px);
+      animation: dropIn 500ms ease-out 210ms forwards; }
+    .ls { color: var(--text-mid); font-size: 15px; line-height: 1.65;
+      text-align: center; max-width: 270px; margin-top: 10px;
+      opacity: 0; transform: translateY(-8px);
+      animation: dropIn 500ms ease-out 360ms forwards; }
+    @keyframes dropIn { to { opacity: 1; transform: translateY(0); } }
+
+    #open-btn {
+      margin-top: 36px; padding: 14px 36px; border-radius: 16px;
+      background: var(--send-grad); border: 1px solid var(--accent-dark);
+      box-shadow: var(--shadow-send); font-size: 15px; font-weight: 600;
+      color: var(--text); cursor: pointer; letter-spacing: -.1px;
+      opacity: 0; transform: scale(.95);
+      animation: btnSpring 400ms cubic-bezier(.34,1.56,.64,1) 510ms forwards;
+      transition: opacity .15s;
+    }
+    #open-btn:hover { opacity: .88; }
+    @keyframes btnSpring { to { opacity: 1; transform: scale(1); } }
+
+    #typing-link {
+      margin-top: 16px; background: none; border: none;
+      color: var(--text-dim); font-size: 13px; cursor: pointer;
+      padding: 6px 12px; transition: color .2s;
+      opacity: 0; animation: dropIn 400ms ease-out 660ms forwards;
+    }
+    #typing-link:hover { color: var(--accent-dark); }
+
+    /* ── APP SHELL ───────────────────────────────────── */
+    #app {
+      display: flex; flex-direction: column;
+      height: 100dvh; max-width: 430px;
+      margin: 0 auto; position: relative;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ──────────────────────────────────────── */
+    #header {
+      display: flex; align-items: center; justify-content: center;
+      padding: 12px 20px 6px; position: relative; flex-shrink: 0;
+    }
+    #header-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 24px; font-weight: 600; color: var(--text); letter-spacing: -.5px;
+    }
+    #settings-btn {
+      position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer;
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    #settings-btn:hover { background: rgba(0,0,0,.05); }
+    #settings-btn svg { color: var(--text-mid); }
+
+    /* ── CAMERA ──────────────────────────────────────── */
+    #cam-section { padding: 0 17px; flex-shrink: 0; }
+
+    #cam-card {
+      width: 100%; border-radius: 28px;
+      border: 1px solid var(--accent); background: var(--cam-grad);
+      position: relative; overflow: visible; padding: 10px;
+      transition: border-color .3s ease, box-shadow .3s ease;
+    }
+    @keyframes camBreathe {
+      0%,100% { border-color: rgba(249,197,176,.4); box-shadow: none; }
+      50%      { border-color: var(--accent-dark); box-shadow: 0 0 0 3px rgba(245,160,122,.10); }
+    }
+    #cam-card.breathing { animation: camBreathe 2s ease-in-out infinite; }
+    @keyframes camPulse {
+      0%   { border-color: var(--accent); box-shadow: none; }
+      28%  { border-color: var(--accent-dark); box-shadow: 0 0 0 6px rgba(245,160,122,.22), 0 0 28px rgba(249,197,176,.55); }
+      100% { border-color: var(--accent); box-shadow: none; }
+    }
+    #cam-card.pulse { animation: camPulse 520ms ease-out forwards; }
+    @keyframes camRipple {
+      0%   { box-shadow: 0 0 0 0 rgba(245,160,122,.32); }
+      100% { box-shadow: 0 0 0 20px rgba(245,160,122,0); }
+    }
+    #cam-card.ripple { animation: camRipple 480ms ease-out forwards; }
+    #cam-card.idle-fade { border-color: rgba(249,197,176,.2) !important; box-shadow: none !important; }
+
+    #cam-inner {
+      width: 100%; border-radius: 18px; background: white;
+      box-shadow: var(--shadow-card); overflow: hidden;
+      position: relative; aspect-ratio: 4 / 3.4;
+      transition: opacity .35s ease, filter .3s ease;
+    }
+    #cam-inner.dimmed { opacity: .55; filter: brightness(.85); }
+
+    #video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; background: #000; }
+
+    #status-chip {
+      position: absolute; top: 16px; left: 16px;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px 5px 9px; border-radius: 99px;
+      background: rgba(255,255,255,.94); border: 1px solid rgba(0,0,0,.10);
+      box-shadow: 0 2px 10px rgba(0,0,0,.18);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      z-index: 10; transition: all .3s;
+    }
+    .chip-dot { width: 6px; height: 6px; border-radius: 3px; background: #FE9151; flex-shrink: 0; }
+    .chip-dot.pulse { animation: dotPulse 1.2s infinite; }
+    @keyframes dotPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+    #chip-label { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; }
+
+    #cam-error {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(255,255,255,.96); backdrop-filter: blur(12px);
+      border-radius: 0 0 18px 18px; padding: 14px;
+      text-align: center; font-size: 13px; color: var(--text-mid);
+      transform: translateY(100%); transition: transform .3s ease-out; z-index: 20;
+    }
+    #cam-error.show { transform: translateY(0); }
+    #cam-error a { color: var(--accent-dark); font-weight: 600; text-decoration: none; }
+
+    #cam-placeholder {
+      position: absolute; inset: 0; background: white; border-radius: 18px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px; color: var(--text-dim);
+    }
+    #cam-placeholder span { font-size: 13px; }
+
+    #got-it-pill {
+      position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
+      background: var(--bg-warm); border: 1px solid var(--accent);
+      border-radius: 99px; padding: 3px 14px;
+      font-size: 11px; font-weight: 600; color: var(--accent-dark);
+      letter-spacing: .04em; white-space: nowrap;
+      opacity: 0; pointer-events: none; z-index: 15;
+      transition: opacity .2s ease;
+    }
+    #got-it-pill.show { opacity: 1; }
+
+    #cam-hint {
+      margin-top: 12px; padding: 5px 4px;
+      font-size: 12px; color: var(--text-dim);
+      letter-spacing: .03em; text-align: center;
+    }
+    @keyframes hintPulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+    #cam-hint.pulse { animation: hintPulse 2s ease-in-out; }
+
+    /* ── CONNECTOR ───────────────────────────────────── */
+    #connector { margin: 0 17px; height: 18px; flex-shrink: 0; }
+    #connector canvas { display: block; width: 100%; height: 100%; }
+
+    /* ── STATUS LABEL ────────────────────────────────── */
+    #status-label {
+      text-align: center; font-size: 12px; color: var(--text-muted);
+      padding: 2px 17px 6px; flex-shrink: 0; min-height: 22px;
+      transition: opacity .2s ease; letter-spacing: .02em;
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+    }
+
+    /* ── CHAT THREAD ─────────────────────────────────── */
+    #chat-thread {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      padding: 6px 17px 10px;
+      display: flex; flex-direction: column; gap: 3px;
+      scroll-behavior: smooth;
+    }
+    #chat-thread::-webkit-scrollbar { width: 3px; }
+    #chat-thread::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; }
+
+    /* Empty state */
+    #chat-empty {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 12px;
+      padding: 20px 0;
+    }
+    #chat-empty p {
+      font-size: 14px; color: var(--text-dim); font-style: italic;
+      text-align: center; line-height: 1.5;
+    }
+
+    /* Message rows */
+    .msg-row {
+      display: flex; flex-direction: column;
+      max-width: 80%; margin-bottom: 4px;
+    }
+    .msg-row.signed { align-self: flex-end; align-items: flex-end; }
+    .msg-row.typed  { align-self: flex-start; align-items: flex-start; }
+
+    .msg-label {
+      font-size: 11px; color: var(--text-muted);
+      margin-bottom: 4px; padding: 0 2px;
+    }
+    .msg-bubble {
+      padding: 11px 15px; font-size: 16px; line-height: 1.45;
+      word-break: break-word; position: relative;
+    }
+    .msg-row.signed .msg-bubble {
+      background: #1A3328; color: #FFFFFF;
+      font-family: 'Playfair Display', Georgia, serif;
+      border-radius: 16px 16px 4px 16px;
+      animation: slideInRight 250ms ease-out;
+    }
+    .msg-row.typed .msg-bubble {
+      background: #F5EDE8; color: var(--text);
+      border-radius: 16px 16px 16px 4px;
+      animation: slideInLeft 250ms ease-out;
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(14px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-14px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .msg-time {
+      font-size: 10px; color: var(--text-dim);
+      margin-top: 3px; padding: 0 2px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    /* ── CONFIRM BAR ─────────────────────────────────── */
+    #confirm-bar {
+      flex-shrink: 0;
+      max-height: 0; overflow: hidden;
+      padding: 0 17px;
+      transition: max-height 320ms cubic-bezier(0.34,1.20,0.64,1),
+                  padding 280ms ease,
+                  opacity 250ms ease;
+      opacity: 0;
+    }
+    #confirm-bar.show {
+      max-height: 160px;
+      padding: 6px 17px 8px;
+      opacity: 1;
+    }
+    #confirm-inner {
+      background: #FFFFFF;
+      border-radius: 16px;
+      box-shadow: 0 -4px 24px rgba(200,140,120,0.10), 0 2px 8px rgba(0,0,0,0.06);
+      border: 1px solid rgba(249,197,176,0.4);
+      padding: 14px 16px 12px;
+    }
+    #confirm-hint {
+      font-size: 11px; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .08em;
+      margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+    }
+    #confirm-preview {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 18px; font-weight: 500; color: var(--text);
+      line-height: 1.3; margin-bottom: 12px; min-height: 26px;
+      word-break: break-word;
+    }
+    #confirm-actions {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    #confirm-clear {
+      background: none; border: none; cursor: pointer;
+      font-size: 14px; font-weight: 600; color: #8B8A96;
+      padding: 8px 4px; transition: color .2s;
+    }
+    #confirm-clear:hover { color: var(--text); }
+    #confirm-send {
+      background: linear-gradient(135deg, #F9C5B0 0%, #E8845A 100%);
+      border: none; border-radius: 99px;
+      height: 44px; padding: 0 24px;
+      font-size: 14px; font-weight: 600; color: #FFFFFF;
+      cursor: pointer; display: flex; align-items: center; gap: 8px;
+      transition: opacity .15s, transform .15s;
+      box-shadow: 0 2px 8px rgba(232,132,90,0.30);
+    }
+    #confirm-send:hover { opacity: .92; }
+    #confirm-send:active { transform: scale(.97); }
+    #confirm-speak-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-dim); padding: 2px; transition: color .2s;
+    }
+    #confirm-speak-btn:hover { color: var(--accent-dark); }
+
+    /* ── FOOTER INFO ─────────────────────────────────── */
+    #footer-info {
+      padding: 2px 17px 6px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #timestamp, #signs-count {
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      font-size: 10px; color: var(--text-dim);
+    }
+
+    /* ── INPUT BAR ───────────────────────────────────── */
+    #input-bar {
+      padding: 10px 17px 20px; border-top: 1px solid var(--border-soft);
+      display: flex; gap: 8px; align-items: center;
+      flex-shrink: 0; background: var(--bg); transition: background .4s ease;
+    }
+    #app.typing #input-bar { background: #FFF0E8; }
+
+    #reply-wrap {
+      flex: 1; background: var(--bg-input);
+      border: 1.5px solid #F0E8E3; border-radius: 14px;
+      display: flex; align-items: center;
+      padding: 0 11px; min-height: 44px;
+      transition: border-color 300ms ease, box-shadow 300ms ease;
+    }
+    #reply-wrap.glow {
+      border-color: rgba(232,132,90,0.4);
+      box-shadow: 0 0 0 3px rgba(232,132,90,0.07);
+    }
+    #reply-input {
+      flex: 1; background: none; border: none;
+      font-size: 15px; color: var(--text);
+      font-family: inherit; outline: none;
+      padding: 10px 0; resize: none;
+      min-height: 44px; max-height: 88px; line-height: 1.4;
+    }
+    #reply-input::placeholder { color: rgba(26,26,26,.35); }
+    #mic-btn {
+      background: none; border: none; cursor: pointer;
+      width: 24px; height: 24px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-dim); opacity: .7;
+      transition: opacity .15s, color .2s;
+    }
+    #mic-btn:hover { opacity: 1; }
+    @keyframes micPulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    #mic-btn.active { color: var(--accent-dark); opacity: 1; animation: micPulse .9s ease-in-out infinite; }
+
+    .action-btn {
+      width: 44px; height: 44px; border-radius: 14px;
+      border: 1px solid var(--border); background: var(--bg-input);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0; transition: opacity .15s;
+    }
+    .action-btn:hover { opacity: .8; }
+    .action-btn svg { color: var(--text-mid); }
+
+    #send-btn {
+      width: 44px; height: 44px; border-radius: 14px;
+      border: 1px solid var(--accent-dark); background: var(--send-grad);
+      box-shadow: var(--shadow-send);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0; transition: opacity .15s;
+    }
+    #send-btn:hover { opacity: .88; }
+    #send-btn:active { opacity: .72; }
+    #send-btn svg { color: var(--text); }
+
+    /* ── TYPING COMPRESSION ──────────────────────────── */
+    #cam-section { transition: transform .45s cubic-bezier(.4,0,.2,1); transform-origin: top center; }
+    #app.typing #cam-section { transform: scale(.91) translateY(-10px); }
+    #app.typing #input-bar { background: #FFF0E8; }
+
+    /* ── SETTINGS DRAWER ─────────────────────────────── */
+    #train-drawer {
+      position: fixed; top: 0; right: 0; bottom: 0; width: min(360px,100vw);
+      background: var(--bg); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transform: translateX(100%); transition: transform .3s cubic-bezier(.4,0,.2,1);
+      z-index: 150; overflow: hidden; box-shadow: -4px 0 24px rgba(0,0,0,.06);
+    }
+    #train-drawer.open { transform: translateX(0); }
+    .drawer-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .drawer-title { font-size: 16px; font-weight: 600; font-family: 'Playfair Display', serif; }
+    .drawer-close { background: none; border: none; cursor: pointer; font-size: 22px; color: var(--text-mid); line-height: 1; padding: 2px 6px; border-radius: 6px; }
+    .drawer-close:hover { color: var(--text); }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+    .backend-status { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); font-size: 13px; color: var(--text-mid); background: var(--bg-input); }
+    .be-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+    .backend-status.connected .be-dot { background: #52C97A; animation: dotPulse 2s infinite; }
+    .drawer-section-label { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--text-dim); }
+    .input-field { width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; transition: border-color .2s; }
+    .input-field:focus { border-color: var(--accent-dark); }
+    .input-field::placeholder { color: var(--text-dim); }
+    .sign-name-field { font-size: 14px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+    .sign-name-field::placeholder { font-weight: 400; letter-spacing: 0; text-transform: none; }
+    .record-controls { display: flex; gap: 8px; }
+    #capture-btn { flex: 1; background: rgba(249,197,176,.18); color: var(--accent-dark); border: 1px solid rgba(245,160,122,.35); border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background .2s; }
+    #capture-btn:hover { background: rgba(249,197,176,.3); }
+    #capture-btn:disabled { opacity: .4; cursor: not-allowed; }
+    #auto-btn { background: var(--bg-input); color: var(--text-mid); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; white-space: nowrap; }
+    #auto-btn:hover { border-color: var(--accent-dark); color: var(--accent-dark); }
+    #auto-btn.recording { border-color: #FF6B6B; color: #FF6B6B; background: rgba(255,107,107,.08); }
+    .sample-progress { display: flex; align-items: center; gap: 10px; }
+    #sample-bar-wrap { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    #sample-bar { height: 100%; background: var(--send-grad); border-radius: 2px; width: 0%; transition: width .3s; }
+    #sample-count-label { font-size: 11px; color: var(--text-dim); white-space: nowrap; min-width: 64px; text-align: right; }
+    #accuracy-badge { display: none; padding: 8px 14px; border-radius: 10px; background: rgba(249,197,176,.15); border: 1px solid rgba(245,160,122,.25); font-size: 12px; color: var(--accent-dark); text-align: center; }
+    #accuracy-badge.visible { display: block; }
+    .drawer-divider { border: none; border-top: 1px solid var(--border); }
+    .signs-list { display: flex; flex-direction: column; gap: 6px; }
+    .sign-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: var(--bg-input); border: 1px solid var(--border); }
+    .sign-name-chip { flex: 1; font-size: 13px; font-weight: 700; letter-spacing: .04em; }
+    .sign-sample-count { font-size: 11px; color: var(--text-dim); }
+    .sign-del-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 4px; border-radius: 4px; transition: color .15s; }
+    .sign-del-btn:hover { color: #FF6B6B; }
+    .empty-signs { font-size: 13px; color: var(--text-dim); text-align: center; padding: 20px 0; line-height: 1.6; }
+    #quick-signs-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .quick-sign-btn { background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--text-mid); cursor: pointer; transition: all .15s; white-space: nowrap; }
+    .quick-sign-btn:hover { border-color: var(--accent-dark); color: var(--accent-dark); background: rgba(249,197,176,.12); }
+    .quick-sign-btn.trained { border-color: #52C97A; color: #52C97A; background: rgba(82,201,122,.08); }
+    .quick-sign-btn.built-in { border-color: rgba(82,201,122,.4); color: #52C97A; }
+
+    /* ── TOAST ───────────────────────────────────────── */
+    #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(70px); background: var(--text); color: white; padding: 10px 18px; border-radius: 20px; font-size: 13px; z-index: 300; transition: transform .3s cubic-bezier(.4,0,.2,1); pointer-events: none; max-width: 90vw; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* word animation (used in preview) */
+    @keyframes wordIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+    .prev-word { display: inline-block; animation: wordIn 200ms ease-out forwards; }
+
+    /* ── INTERPRETER CARD BUTTON ─────────────────────── */
+    #card-btn {
+      position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer;
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    #card-btn:hover { background: rgba(0,0,0,.05); }
+    #card-btn svg { color: var(--text-mid); }
+
+    /* ── INTERPRETER CARD SHEET ──────────────────────── */
+    #ic-overlay {
+      position: fixed; inset: 0; z-index: 170;
+      background: rgba(26,26,26,0.35);
+      backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+      opacity: 0; pointer-events: none;
+      transition: opacity 300ms ease;
+    }
+    #ic-overlay.show { opacity: 1; pointer-events: all; }
+
+    #ic-sheet {
+      position: fixed; bottom: 0; left: 50%;
+      transform: translateX(-50%) translateY(100%);
+      width: min(430px, 100vw); z-index: 180;
+      padding: 0 17px 32px;
+      transition: transform 300ms ease-out;
+    }
+    #ic-sheet.show { transform: translateX(-50%) translateY(0); }
+
+    #ic-handle {
+      width: 36px; height: 4px; border-radius: 2px;
+      background: rgba(26,26,26,.15);
+      margin: 10px auto 14px;
+    }
+    #ic-card {
+      background: #FFFFFF; border: 1px solid #F0E8E3;
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(200,140,120,0.12);
+      padding: 28px 26px 24px;
+    }
+    #ic-logo {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 13px; font-weight: 500; color: var(--text-muted);
+      margin-bottom: 16px; letter-spacing: .02em;
+    }
+    #ic-headline {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 28px; font-weight: 600; color: var(--text);
+      line-height: 1.2; margin-bottom: 14px;
+    }
+    #ic-body {
+      font-size: 16px; color: #3A3A3A; line-height: 1.6;
+      margin-bottom: 22px;
+    }
+    #ic-langs { display: flex; align-items: center; gap: 8px; }
+    #ic-langs span { color: var(--text-dim); font-size: 14px; }
+    .ic-lang {
+      background: none; border: none; cursor: pointer;
+      font-size: 13px; color: var(--text-mid);
+      padding: 4px 2px; font-family: inherit; transition: color .15s;
+    }
+    .ic-lang.active { color: var(--accent-dark); font-weight: 600; }
+    .ic-lang:hover { color: var(--text); }
+    #ic-share {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; margin-top: 12px; height: 48px;
+      background: var(--send-grad); border: 1px solid var(--accent-dark);
+      border-radius: 14px; box-shadow: var(--shadow-send);
+      font-size: 14px; font-weight: 600; color: var(--text);
+      cursor: pointer; transition: opacity .15s;
+    }
+    #ic-share:hover { opacity: .88; }
+
+    /* ── FLIP LAYOUT (Hand Me The Phone) ─────────────── */
+    #app.flipped #input-bar {
+      order: 1;
+      border-top: none; border-bottom: 1px solid var(--border-soft);
+    }
+    #app.flipped #confirm-bar { order: 2; }
+    #app.flipped #footer-info { order: 3; }
+    #app.flipped #chat-thread { order: 4; }
+    #app.flipped #status-label{ order: 5; }
+    #app.flipped #connector   { order: 6; }
+    #app.flipped #cam-section { order: 7; }
+
+    /* ── WARM TOAST ──────────────────────────────────── */
+    #toast.warm {
+      background: #F5EDE8; color: #1A1A1A;
+      box-shadow: 0 4px 16px rgba(200,140,120,.2);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── LAUNCH ────────────────────────────────────────── -->
+<div id="launch">
+  <div class="lb">Signbridge</div>
+  <div class="lh">Talk freely.</div>
+  <p class="ls">Sign into the camera. The words appear here.</p>
+  <button id="open-btn" onclick="startApp()">Open the bridge</button>
+  <button id="typing-link" onclick="startApp(true)">Prefer typing? →</button>
+</div>
+
+<!-- ── MAIN APP ──────────────────────────────────────── -->
+<div id="app" style="display:none">
+
+  <div id="header">
+    <button id="card-btn" onclick="openInterpreterCard()" title="Interpreter card">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="2" y="5" width="20" height="14" rx="3"/>
+        <line x1="6" y1="10" x2="14" y2="10"/>
+        <line x1="6" y1="14" x2="11" y2="14"/>
+      </svg>
+    </button>
+    <span id="header-title">Signbridge</span>
+    <button id="settings-btn" onclick="toggleDrawer()" title="Preferences">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+
+  <div id="cam-section">
+    <div id="cam-card" class="breathing">
+      <div id="status-chip">
+        <div class="chip-dot" id="chip-dot"></div>
+        <span id="chip-label">Waking up the camera…</span>
+      </div>
+      <div id="cam-inner">
+        <video id="video" autoplay playsinline muted></video>
+        <div id="cam-placeholder">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" style="opacity:.3;color:var(--text-dim)">
+            <rect x="2" y="7" width="15" height="12" rx="2"/><path d="M17 9l5-3v12l-5-3"/>
+          </svg>
+          <span id="cam-msg">Waking up the camera…</span>
+        </div>
+        <div id="cam-error">
+          Camera access needed — <a href="#" onclick="return openCamSettings()">tap to open settings</a>
+        </div>
+      </div>
+      <div id="got-it-pill">Got it</div>
+    </div>
+    <div id="cam-hint">Centre your hands in the frame</div>
+  </div>
+
+  <!-- Visual bridge from camera to chat -->
+  <div id="connector"><canvas id="connector-canvas"></canvas></div>
+
+  <!-- Conversation state label -->
+  <div id="status-label">Ready when you are</div>
+
+  <!-- Chat thread -->
+  <div id="chat-thread">
+    <div id="chat-empty">
+      <p>Your conversation will appear here</p>
+      <svg width="52" height="34" viewBox="0 0 52 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="cg1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#F9C5B0"/><stop offset="100%" stop-color="#F5A07A"/></linearGradient>
+          <linearGradient id="cg2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#F5A07A"/><stop offset="100%" stop-color="#FF9BBE"/></linearGradient>
+        </defs>
+        <rect x="1" y="1" width="28" height="19" rx="6" stroke="url(#cg1)" stroke-width="1.5"/>
+        <path d="M7 20 L4 26" stroke="url(#cg1)" stroke-width="1.5" stroke-linecap="round"/>
+        <rect x="23" y="8" width="28" height="19" rx="6" stroke="url(#cg2)" stroke-width="1.5"/>
+        <path d="M45 27 L48 33" stroke="url(#cg2)" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Footer meta -->
+  <div id="footer-info">
+    <span id="timestamp">—</span>
+    <span id="signs-count">Listening</span>
+  </div>
+
+  <!-- Confirm bar — slides up when translation arrives -->
+  <div id="confirm-bar">
+    <div id="confirm-inner">
+      <div id="confirm-hint">
+        <span>Is this right?</span>
+        <button id="confirm-speak-btn" onclick="speakPreview()" title="Hear this">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M15.54 8.46a5 5 0 010 7.07"/>
+          </svg>
+        </button>
+      </div>
+      <div id="confirm-preview"></div>
+      <div id="confirm-actions">
+        <button id="confirm-clear" onclick="clearPreview()">✕ Clear</button>
+        <button id="confirm-send" onclick="confirmMessage()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Send this
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input bar -->
+  <div id="input-bar">
+    <div id="reply-wrap">
+      <textarea id="reply-input" placeholder="Type your reply…" rows="1"></textarea>
+      <button id="mic-btn" onclick="toggleVoiceInput()" title="Speak your reply">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/>
+        </svg>
+      </button>
+    </div>
+    <button class="action-btn" onclick="copyLastSigned()" title="Copy last signed">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+      </svg>
+    </button>
+    <button id="send-btn" onclick="sendReply()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<!-- ── PREFERENCES DRAWER ────────────────────────────── -->
+<div id="train-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Preferences</span>
+    <button class="drawer-close" onclick="toggleDrawer()">×</button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-section-label" style="margin-bottom:8px">Connection</div>
+    <input class="input-field" type="text" id="backend-url-input" value="http://localhost:8000" placeholder="http://localhost:8000" spellcheck="false" style="font-family:'SF Mono','Courier New',monospace;font-size:12px">
+    <input class="input-field" type="password" id="settings-key-input" placeholder="Mistral API key (optional — enables vision AI)" autocomplete="off" spellcheck="false" style="margin-top:8px">
+    <button onclick="saveSettings()" style="width:100%;background:rgba(249,197,176,.2);border:1px solid rgba(245,160,122,.35);border-radius:10px;padding:9px 14px;font-size:12px;font-weight:600;color:var(--accent-dark);cursor:pointer">Save &amp; Reconnect</button>
+    <hr class="drawer-divider">
+    <div class="backend-status" id="backend-status">
+      <div class="be-dot"></div>
+      <span id="backend-status-text">Checking backend…</span>
+    </div>
+    <hr class="drawer-divider">
+    <div class="drawer-section-label">Train your signs</div>
+    <div style="background:rgba(82,201,122,.08);border:1px solid rgba(82,201,122,.2);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--text-mid);line-height:1.65">
+      <b style="color:#52C97A">Tier 1 — Gesture AI:</b> 8 signs work instantly.<br>
+      <b style="color:var(--accent-dark)">Tier 2 — Real samples:</b> Record your hand → KNN learns your style.<br>
+      <b style="color:#B088D8">Tier 3 — Mistral:</b> Enter API key above for vision AI.
+    </div>
+    <div>
+      <div class="drawer-section-label" style="margin-bottom:8px">Quick record</div>
+      <div id="quick-signs-grid"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="drawer-section-label">Sign name</div>
+      <input class="input-field sign-name-field" type="text" id="sign-name-input" placeholder="e.g. HELLO" maxlength="30">
+      <p style="font-size:11px;color:var(--text-dim);line-height:1.6;margin-top:-4px">Make the sign in front of camera → press <b>Auto 15×</b>. Hold still while recording.</p>
+      <div class="record-controls">
+        <button id="capture-btn" onclick="captureOneSample()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg>
+          Capture 1
+        </button>
+        <button id="auto-btn" onclick="autoRecord()">Auto 15×</button>
+      </div>
+      <div class="sample-progress">
+        <div id="sample-bar-wrap"><div id="sample-bar"></div></div>
+        <span id="sample-count-label">0 / 15</span>
+      </div>
+    </div>
+    <div id="accuracy-badge"></div>
+    <hr class="drawer-divider">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="drawer-section-label">Trained signs</div>
+      <button onclick="resetAllSigns()" style="font-size:11px;color:#FF6B6B;background:none;border:none;cursor:pointer;padding:2px 4px">Reset all</button>
+    </div>
+    <div class="signs-list" id="signs-list">
+      <p class="empty-signs">No real samples yet.<br>Record 15+ samples per sign for best accuracy.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── INTERPRETER CARD ───────────────────────────────── -->
+<div id="ic-overlay" onclick="closeInterpreterCard()"></div>
+<div id="ic-sheet">
+  <div id="ic-handle"></div>
+  <div id="ic-card">
+    <div id="ic-logo">Signbridge</div>
+    <div id="ic-headline">I am deaf.</div>
+    <div id="ic-body">This app translates my sign language into text in real time. Please read the screen as I sign.</div>
+    <div id="ic-langs">
+      <button class="ic-lang active" data-lang="en" onclick="switchCardLang('en')">English</button>
+      <span>·</span>
+      <button class="ic-lang" data-lang="hi" onclick="switchCardLang('hi')">हिन्दी</button>
+      <span>·</span>
+      <button class="ic-lang" data-lang="gu" onclick="switchCardLang('gu')">ગુજરાતી</button>
+    </div>
+  </div>
+  <button id="ic-share" onclick="shareCard()">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+    </svg>
+    Share this message
+  </button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  CONFIG
+// ════════════════════════════════════════════════════════
+const DEFAULT_BACKEND = 'http://localhost:8000';
+const DEFAULT_KEY     = '';   // paste Mistral key here to enable vision AI
+
+// ════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════
+let apiKey       = DEFAULT_KEY;
+let backendUrl   = DEFAULT_BACKEND;
+let backendReady = false;
+
+let handsPresent     = false;
+let translating      = false;
+let lastCapture      = 0;
+const INTERVAL       = 1200;
+let currentLandmarks = null;
+let signsReadCount   = 0;
+
+// Conversation
+let messages     = [];    // { id, type:'signed'|'typed', text, timestamp }
+let msgIdCounter = 0;
+let previewText  = '';    // unconfirmed translation in confirm bar
+let lastSigned   = '';    // last confirmed signed text
+
+// Conversation state
+let appState = 'idle';    // 'idle'|'signing'|'preview'|'waiting-reply'|'they-typing'
+
+// Gesture
+let gestureRecognizer = null;
+let grReady           = false;
+let lastGestureResult = null;
+let lastDetectTime    = 0;
+const GESTURE_WINDOW  = 4;
+let gestureHistory    = [];
+
+const GESTURE_TO_ISL = {
+  'Open_Palm':'HELLO','Thumb_Up':'GOOD / HELP','Thumb_Down':'BAD',
+  'Closed_Fist':'YES','Pointing_Up':'D / INDEX','Victory':'V / PEACE',
+  'ILoveYou':'I LOVE YOU (Y)',
+};
+
+// Timers
+let autoRecording = false, autoTimer = null;
+const TARGET_SAMPLES = 15;
+let idleTimer = null, idleActive = false;
+let gotItTimer = null;
+let statusFadeTimer = null;
+
+// Waveform
+let wPhase = 0, wAmp = 0, wTarget = 0, wRaf = null;
+
+// Voice input
+let voiceRec = null, micActive = false;
+
+// ════════════════════════════════════════════════════════
+//  DOM
+// ════════════════════════════════════════════════════════
+const launchEl        = document.getElementById('launch');
+const appEl           = document.getElementById('app');
+const videoEl         = document.getElementById('video');
+const camInner        = document.getElementById('cam-inner');
+const camPlaceholder  = document.getElementById('cam-placeholder');
+const camMsg          = document.getElementById('cam-msg');
+const camHint         = document.getElementById('cam-hint');
+const camCard         = document.getElementById('cam-card');
+const camError        = document.getElementById('cam-error');
+const gotItPill       = document.getElementById('got-it-pill');
+const chipDot         = document.getElementById('chip-dot');
+const chipLabel       = document.getElementById('chip-label');
+const connCanvas      = document.getElementById('connector-canvas');
+const connCtx         = connCanvas.getContext('2d');
+const statusLabel     = document.getElementById('status-label');
+const chatThread      = document.getElementById('chat-thread');
+const chatEmpty       = document.getElementById('chat-empty');
+const footerInfo      = document.getElementById('footer-info');
+const timestampEl     = document.getElementById('timestamp');
+const signsCountEl    = document.getElementById('signs-count');
+const confirmBar      = document.getElementById('confirm-bar');
+const confirmPreview  = document.getElementById('confirm-preview');
+const replyInput      = document.getElementById('reply-input');
+const replyWrap       = document.getElementById('reply-wrap');
+const micBtn          = document.getElementById('mic-btn');
+const trainDrawer     = document.getElementById('train-drawer');
+const signNameInput   = document.getElementById('sign-name-input');
+const captureBtn      = document.getElementById('capture-btn');
+const autoBtn         = document.getElementById('auto-btn');
+const sampleBar       = document.getElementById('sample-bar');
+const sampleCountLabel = document.getElementById('sample-count-label');
+const signsList       = document.getElementById('signs-list');
+const accuracyBadge   = document.getElementById('accuracy-badge');
+const backendStatusEl = document.getElementById('backend-status');
+const backendStatusText = document.getElementById('backend-status-text');
+
+// ════════════════════════════════════════════════════════
+//  LAUNCH
+// ════════════════════════════════════════════════════════
+function startApp(typing = false) {
+  startMotionListening().catch(() => {}); // iOS: must be in user-gesture context
+  launchEl.classList.add('out');
+  setTimeout(() => {
+    launchEl.classList.add('gone');
+    appEl.style.display = 'flex';
+    document.body.classList.add('warm');
+    initCamera();
+    checkBackend();
+    updateTimestamp();
+    setInterval(updateTimestamp, 30000);
+    if (!wRaf) wRaf = requestAnimationFrame(animateWave);
+    requestAnimationFrame(drawConnector);
+    if (typing) setTimeout(() => replyInput.focus(), 600);
+  }, 330);
+}
+
+function saveSettings() {
+  const u = document.getElementById('backend-url-input');
+  const k = document.getElementById('settings-key-input');
+  if (u?.value.trim()) backendUrl = u.value.trim().replace(/\/$/, '');
+  if (k?.value.trim()) apiKey = k.value.trim();
+  checkBackend(); refreshSignsList();
+  showToast('Saved — reconnecting…');
+}
+
+function updateTimestamp() {
+  const n = new Date(), h = n.getHours(), m = n.getMinutes();
+  timestampEl.textContent = `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
+}
+
+// ════════════════════════════════════════════════════════
+//  CONVERSATION STATE
+// ════════════════════════════════════════════════════════
+const STATE_LABELS = {
+  'idle':          { text: 'Ready when you are',   dot: false },
+  'signing':       { text: 'Signing',              dot: true  },
+  'preview':       { text: 'Review your message',  dot: false },
+  'waiting-reply': { text: 'Waiting for their reply', dot: false },
+  'they-typing':   { text: 'They\'re typing',      dot: true  },
+  'idle-long':     { text: 'Ready when you are',   dot: false },
+};
+
+function setAppState(state) {
+  if (appState === state) return;
+  appState = state;
+  const cfg = STATE_LABELS[state] || STATE_LABELS['idle'];
+  // Crossfade
+  statusLabel.style.opacity = '0';
+  clearTimeout(statusFadeTimer);
+  statusFadeTimer = setTimeout(() => {
+    statusLabel.textContent = cfg.dot ? `${cfg.text}…` : cfg.text;
+    statusLabel.style.opacity = '1';
+  }, 100);
+}
+
+// ════════════════════════════════════════════════════════
+//  CHAT MESSAGES
+// ════════════════════════════════════════════════════════
+function addMessage(type, text) {
+  const id = ++msgIdCounter;
+  const timestamp = new Date();
+  const prevMsg = messages.length ? messages[messages.length - 1] : null;
+  const showLabel = !prevMsg || prevMsg.type !== type;
+  messages.push({ id, type, text, timestamp });
+
+  // DOM cap: keep max 20 bubbles
+  const existing = chatThread.querySelectorAll('.msg-row');
+  if (existing.length >= 20) existing[0].remove();
+
+  chatEmpty.style.display = 'none';
+  renderMessage({ id, type, text, timestamp, showLabel });
+  setTimeout(() => chatThread.scrollTo({ top: chatThread.scrollHeight, behavior: 'smooth' }), 30);
+
+  signsReadCount += type === 'signed' ? 1 : 0;
+  signsCountEl.textContent = signsReadCount === 1
+    ? '1 gesture interpreted' : `${signsReadCount} gestures interpreted`;
+}
+
+function renderMessage({ id, type, text, timestamp, showLabel }) {
+  const h = timestamp.getHours() % 12 || 12;
+  const m = String(timestamp.getMinutes()).padStart(2, '0');
+  const ap = timestamp.getHours() >= 12 ? 'PM' : 'AM';
+
+  const row = document.createElement('div');
+  row.className = `msg-row ${type}`;
+  row.dataset.id = id;
+
+  row.innerHTML = (showLabel ? `<div class="msg-label">${type === 'signed' ? 'You signed' : 'They said'}</div>` : '')
+    + `<div class="msg-bubble">${esc(text)}</div>`
+    + `<div class="msg-time">${h}:${m} ${ap}</div>`;
+
+  chatThread.appendChild(row);
+}
+
+// ════════════════════════════════════════════════════════
+//  TRANSLATION → CONFIRM BAR
+// ════════════════════════════════════════════════════════
+function showTranslation(text) {
+  previewText = text;
+
+  // Animate words in preview
+  const words = text.split(/\s+/);
+  confirmPreview.innerHTML = words.map((w, i) =>
+    `<span class="prev-word" style="animation-delay:${i*70}ms">${esc(w)}</span>`
+  ).join(' ');
+
+  // Show bar (stays open if already open — text just updates)
+  confirmBar.classList.add('show');
+
+  // Camera pulse so deaf person knows something was captured
+  camCard.classList.remove('pulse'); void camCard.offsetWidth; camCard.classList.add('pulse');
+
+  // "Got it" pill
+  clearTimeout(gotItTimer);
+  gotItPill.classList.add('show');
+  gotItTimer = setTimeout(() => gotItPill.classList.remove('show'), 900);
+
+  setAppState('preview');
+  wTarget = 20;
+  setTimeout(() => { wTarget = handsPresent ? 12 : 0; }, 700);
+}
+
+function confirmMessage() {
+  if (!previewText) return;
+  const text = previewText;
+  previewText = '';
+  lastSigned = text;
+
+  // Hide confirm bar
+  confirmBar.classList.remove('show');
+
+  // Add to chat as signed bubble
+  addMessage('signed', text);
+
+  // Speak it aloud for the hearing person
+  speakText(text);
+
+  // Glow reply input — signal hearing person's turn
+  replyWrap.classList.add('glow');
+  replyInput.placeholder = 'Reply to them…';
+
+  // Camera pulse — confirms message sent to deaf person
+  setTimeout(() => {
+    camCard.classList.remove('pulse'); void camCard.offsetWidth; camCard.classList.add('pulse');
+  }, 200);
+
+  setAppState('waiting-reply');
+}
+
+function clearPreview() {
+  previewText = '';
+  confirmBar.classList.remove('show');
+  setAppState(handsPresent ? 'signing' : 'idle');
+}
+
+function speakPreview() {
+  if (previewText) speakText(previewText);
+}
+
+// ════════════════════════════════════════════════════════
+//  REPLY (HEARING PERSON)
+// ════════════════════════════════════════════════════════
+function sendReply() {
+  const text = replyInput.value.trim();
+  if (!text) return;
+  replyInput.value = '';           // clear immediately — prevents any double-send
+  replyInput.style.height = 'auto';
+  addMessage('typed', text);
+  replyInput.placeholder = 'Type your reply…';
+  replyWrap.classList.remove('glow');
+
+  // Restore camera
+  camInner.classList.remove('dimmed');
+  appEl.classList.remove('typing');
+  document.body.classList.remove('typing');
+
+  // Camera pulse — signals deaf person: your turn
+  setTimeout(() => {
+    camCard.classList.remove('pulse'); void camCard.offsetWidth; camCard.classList.add('pulse');
+  }, 100);
+
+  // Confirm bar re-opens ready for next sign
+  setAppState(handsPresent ? 'signing' : 'idle');
+}
+
+function copyLastSigned() {
+  if (!lastSigned) { showToast('Nothing signed yet.'); return; }
+  navigator.clipboard?.writeText(lastSigned).then(() => showToast('Copied!')).catch(() => showToast('Copy failed.'));
+}
+
+replyInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReply(); }
+});
+replyInput.addEventListener('input', () => {
+  replyInput.style.height = 'auto';
+  replyInput.style.height = Math.min(replyInput.scrollHeight, 88) + 'px';
+  if (replyInput.value.trim()) setAppState('they-typing');
+});
+
+replyInput.addEventListener('focus', () => {
+  camInner.classList.add('dimmed');
+  appEl.classList.add('typing');
+  document.body.classList.add('typing');
+});
+replyInput.addEventListener('blur', () => {
+  if (!replyInput.value.trim()) {
+    camInner.classList.remove('dimmed');
+    appEl.classList.remove('typing');
+    document.body.classList.remove('typing');
+    if (appState === 'they-typing') setAppState('waiting-reply');
+  }
+});
+
+// ════════════════════════════════════════════════════════
+//  TTS
+// ════════════════════════════════════════════════════════
+function speakText(text) {
+  if (!text || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = 'en-IN'; utt.rate = 0.9;
+  window.speechSynthesis.speak(utt);
+}
+
+// ════════════════════════════════════════════════════════
+//  VOICE INPUT
+// ════════════════════════════════════════════════════════
+function toggleVoiceInput() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) { showToast('Voice input not supported. Try Chrome.'); return; }
+  if (micActive) { voiceRec?.stop(); micActive = false; micBtn.classList.remove('active'); return; }
+  voiceRec = new SpeechRec();
+  voiceRec.lang = 'en-IN'; voiceRec.continuous = false; voiceRec.interimResults = true;
+  micActive = true; micBtn.classList.add('active');
+  replyInput.placeholder = 'Listening…';
+  voiceRec.onresult = e => {
+    const t = Array.from(e.results).map(r => r[0].transcript).join('');
+    replyInput.value = t;
+    replyInput.style.height = 'auto';
+    replyInput.style.height = Math.min(replyInput.scrollHeight, 88) + 'px';
+  };
+  voiceRec.onend = () => {
+    if (!micActive) return;        // guard: onend can fire twice on some browsers
+    micActive = false; micBtn.classList.remove('active');
+    replyInput.placeholder = 'Type your reply…';
+    if (replyInput.value.trim()) sendReply();
+  };
+  voiceRec.onerror = e => {
+    micActive = false; micBtn.classList.remove('active');
+    replyInput.placeholder = 'Type your reply…';
+    if (e.error !== 'no-speech') showToast('Voice input failed — try again.');
+  };
+  voiceRec.start();
+}
+
+// ════════════════════════════════════════════════════════
+//  BACKEND
+// ════════════════════════════════════════════════════════
+async function checkBackend() {
+  try {
+    const r = await fetch(`${backendUrl}/health`, { signal: AbortSignal.timeout(3000) });
+    if (r.ok) {
+      const d = await r.json();
+      backendReady = true;
+      backendStatusEl.classList.add('connected');
+      backendStatusText.textContent = `Connected — ${d.signs_trained} sign${d.signs_trained!==1?'s':''} trained`;
+      refreshSignsList();
+    } else setBackendOff();
+  } catch { setBackendOff(); }
+}
+
+function setBackendOff() {
+  backendReady = false;
+  backendStatusEl.classList.remove('connected');
+  backendStatusText.textContent = 'Backend offline — using Tier 1 + Mistral';
+}
+
+// ════════════════════════════════════════════════════════
+//  CAMERA
+// ════════════════════════════════════════════════════════
+async function initCamera() {
+  setChip('loading', 'Waking up the camera…');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 800 } }
+    });
+    videoEl.srcObject = stream;
+    await new Promise(r => videoEl.addEventListener('loadedmetadata', r, { once: true }));
+    await videoEl.play().catch(() => {});
+    camPlaceholder.style.display = 'none';
+    camCard.classList.remove('breathing');
+    setChip('ready', 'Centre your hands in the frame');
+    resetIdle();
+  } catch {
+    camCard.classList.remove('breathing');
+    camError.classList.add('show');
+    setChip('ready', 'Camera access needed');
+    return;
+  }
+  setChip('loading', 'Loading gesture AI…');
+  try {
+    const base = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+    const { GestureRecognizer, FilesetResolver } = await import(base);
+    const vision = await FilesetResolver.forVisionTasks(base + '/wasm');
+    gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task',
+        delegate: 'GPU'
+      },
+      runningMode: 'VIDEO', numHands: 1
+    });
+    grReady = true;
+  } catch { grReady = false; }
+  setChip('ready', 'Centre your hands in the frame');
+  detectLoop();
+}
+
+function detectLoop() {
+  requestAnimationFrame(detectLoop);
+  if (videoEl.readyState < 2) return;
+  const now = performance.now();
+  if (now - lastDetectTime < 80) return;
+  lastDetectTime = now;
+  if (grReady && gestureRecognizer) {
+    try { onGestureResults(gestureRecognizer.recognizeForVideo(videoEl, now)); } catch {}
+  } else {
+    if (!handsPresent) { handsPresent = true; setHandsUI(true); }
+    const ts = Date.now();
+    if (!translating && ts - lastCapture >= INTERVAL) { lastCapture = ts; recognizeFrame(); }
+  }
+}
+
+function getBestGesture() {
+  if (!gestureHistory.length) return null;
+  const counts = {};
+  gestureHistory.forEach(g => { counts[g] = (counts[g]||0)+1; });
+  const [best, count] = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+  return count >= Math.ceil(GESTURE_WINDOW/2) ? best : null;
+}
+
+function onGestureResults(res) {
+  const has = !!(res.landmarks?.length > 0);
+  currentLandmarks = has ? res.landmarks[0].map(lm => [lm.x, lm.y, lm.z]) : null;
+  const raw = (has && res.gestures?.length > 0) ? res.gestures[0][0] : null;
+  lastGestureResult = raw;
+
+  // Build smoothing window
+  if (raw && raw.categoryName !== 'None' && raw.score >= 0.55) {
+    gestureHistory.push(raw.categoryName);
+    if (gestureHistory.length > GESTURE_WINDOW) gestureHistory.shift();
+  } else if (!has) {
+    if (gestureHistory.length) gestureHistory.shift();
+  }
+
+  // Live chip preview
+  if (has && !translating) {
+    const best = getBestGesture();
+    const isl = best ? GESTURE_TO_ISL[best] : null;
+    if (isl) setChip('reading', `Seeing: ${isl}`);
+    else setChip('reading', 'Reading your signs');
+  }
+
+  if (has !== handsPresent) {
+    handsPresent = has; setHandsUI(has);
+    if (has) {
+      camCard.classList.remove('ripple'); void camCard.offsetWidth;
+      camCard.classList.add('ripple');
+      setTimeout(() => camCard.classList.remove('ripple'), 480);
+    }
+  }
+  if (handsPresent && !translating) {
+    const ts = Date.now();
+    if (ts - lastCapture >= INTERVAL) { lastCapture = ts; recognizeFrame(); }
+  }
+}
+
+function setHandsUI(on) {
+  wTarget = on ? 12 : 0;
+  if (on) { setChip('reading', 'Reading your signs'); resetIdle(); setAppState('signing'); }
+  else {
+    if (!translating) setChip('ready', 'Centre your hands in the frame');
+    scheduleIdle();
+    if (appState === 'signing') setAppState('idle');
+  }
+}
+
+function openCamSettings() {
+  showToast('Open browser settings → Site permissions → Camera → Allow');
+  return false;
+}
+
+// ════════════════════════════════════════════════════════
+//  IDLE
+// ════════════════════════════════════════════════════════
+function scheduleIdle() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    idleActive = true;
+    camCard.classList.add('idle-fade');
+    camHint.textContent = 'Ready when you are';
+    camHint.classList.add('pulse');
+    setTimeout(() => camHint.classList.remove('pulse'), 2000);
+    if (appState === 'idle') setAppState('idle');
+  }, 15000);
+}
+
+function resetIdle() {
+  clearTimeout(idleTimer);
+  if (idleActive) {
+    idleActive = false;
+    camCard.classList.remove('idle-fade');
+    camHint.textContent = 'Centre your hands in the frame';
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  3-TIER RECOGNITION
+// ════════════════════════════════════════════════════════
+async function recognizeFrame() {
+  if (translating) return;
+  translating = true;
+  setChip('interpreting', 'Almost there…');
+  resetIdle();
+
+  // Tier 1 — smoothed GestureRecognizer
+  if (grReady) {
+    const best = getBestGesture();
+    const raw  = lastGestureResult;
+    const name = best || (raw?.categoryName !== 'None' && raw?.score >= 0.65 ? raw.categoryName : null);
+    if (name) {
+      const isl = GESTURE_TO_ISL[name];
+      if (isl) { showTranslation(isl); translating = false; afterRecognize(); return; }
+    }
+  }
+
+  // Tier 2 — KNN backend
+  if (backendReady && currentLandmarks) {
+    try {
+      const r = await fetch(`${backendUrl}/recognize`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ landmarks: currentLandmarks }),
+        signal: AbortSignal.timeout(2000)
+      });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.ready && d.confidence >= 0.50) {
+          showTranslation(d.sign); translating = false; afterRecognize(); return;
+        }
+      }
+    } catch {}
+  }
+
+  // Tier 3 — Mistral vision
+  if (apiKey) { await mistralCapture(); return; }
+
+  translating = false; afterRecognize();
+}
+
+function afterRecognize() {
+  setChip(handsPresent ? 'reading' : 'ready',
+    handsPresent ? 'Reading your signs' : 'Centre your hands in the frame');
+}
+
+async function mistralCapture() {
+  const cw = videoEl.videoWidth||640, ch = videoEl.videoHeight||800;
+  const off = document.createElement('canvas'); off.width = cw; off.height = ch;
+  off.getContext('2d').drawImage(videoEl, 0, 0, cw, ch);
+  const b64 = off.toDataURL('image/jpeg', .82).split(',')[1];
+  try {
+    const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'pixtral-large-latest', max_tokens: 150,
+        messages: [{ role: 'user', content: [
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } },
+          { type: 'text', text: 'You are helping a deaf person communicate. If hands are making ISL signs, output ONLY the English words signed. If unclear, output: WAITING' }
+        ]}]
+      })
+    });
+    if (res.status === 401) { showToast('Invalid Mistral key.'); return; }
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content?.trim() ?? 'WAITING';
+    if (reply !== 'WAITING' && reply.length > 0) showTranslation(reply);
+  } catch(e) { if (e.name !== 'AbortError') showToast('Translation failed — check connection.'); }
+  finally { translating = false; afterRecognize(); }
+}
+
+// ════════════════════════════════════════════════════════
+//  CHIP
+// ════════════════════════════════════════════════════════
+function setChip(state, label) {
+  chipLabel.textContent = label;
+  chipDot.classList.toggle('pulse', state !== 'ready');
+  chipDot.style.background = state === 'ready' ? '#C4B8B0' : '#FE9151';
+}
+
+// ════════════════════════════════════════════════════════
+//  DRAWER
+// ════════════════════════════════════════════════════════
+function toggleDrawer() {
+  const open = trainDrawer.classList.toggle('open');
+  if (open) { renderQuickGrid(); checkBackend(); refreshSignsList(); }
+}
+
+async function captureOneSample() {
+  if (!currentLandmarks) { showToast('No hand detected — show your hand first.'); return; }
+  const sign = signNameInput.value.trim().toUpperCase();
+  if (!sign) { showToast('Enter a sign name first.'); return; }
+  if (!backendReady) { showToast('Backend not connected.'); return; }
+  captureBtn.disabled = true;
+  try {
+    const r = await fetch(`${backendUrl}/samples`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sign, landmarks: currentLandmarks })
+    });
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    sampleBar.style.width = `${Math.min(d.samples/TARGET_SAMPLES*100, 100)}%`;
+    sampleCountLabel.textContent = `${d.samples} / ${TARGET_SAMPLES}`;
+    if (d.accuracy != null) {
+      accuracyBadge.textContent = `Accuracy: ${Math.round(d.accuracy*100)}%`;
+      accuracyBadge.classList.add('visible');
+    }
+    refreshSignsList();
+  } catch { showToast('Failed — is the backend running?'); }
+  finally { captureBtn.disabled = false; }
+}
+
+function autoRecord() {
+  if (autoRecording) {
+    clearInterval(autoTimer); autoRecording = false;
+    autoBtn.textContent = 'Auto 15×'; autoBtn.classList.remove('recording'); return;
+  }
+  const sign = signNameInput.value.trim().toUpperCase();
+  if (!sign) { showToast('Enter a sign name first.'); return; }
+  if (!backendReady) { showToast('Backend not connected.'); return; }
+  autoRecording = true; autoBtn.textContent = 'Stop'; autoBtn.classList.add('recording');
+  sampleBar.style.width = '0%'; sampleCountLabel.textContent = `0 / ${TARGET_SAMPLES}`;
+  let done = 0;
+  autoTimer = setInterval(async () => {
+    if (!autoRecording || !currentLandmarks) return;
+    await captureOneSample(); done++;
+    if (done >= TARGET_SAMPLES) {
+      clearInterval(autoTimer); autoRecording = false;
+      autoBtn.textContent = 'Auto 15×'; autoBtn.classList.remove('recording');
+      showToast(`✓ ${done} samples recorded for "${sign}"`);
+      renderQuickGrid();
+    }
+  }, 400);
+}
+
+async function refreshSignsList() {
+  if (!backendReady) return;
+  try {
+    const r = await fetch(`${backendUrl}/signs`);
+    if (!r.ok) return;
+    const d = await r.json();
+    renderSignsList(d.signs); renderQuickGrid(d.signs);
+    backendStatusText.textContent = `Connected — ${d.total} sign${d.total!==1?'s':''} trained`;
+  } catch { setBackendOff(); }
+}
+
+function renderSignsList(signs) {
+  const entries = Object.entries(signs);
+  if (!entries.length) {
+    signsList.innerHTML = '<p class="empty-signs">No signs yet.<br>Record 15+ samples per sign for best accuracy.</p>';
+    return;
+  }
+  signsList.innerHTML = entries.sort((a,b) => a[0].localeCompare(b[0])).map(([n, c]) => `
+    <div class="sign-item">
+      <span class="sign-name-chip">${esc(n)}</span>
+      <span class="sign-sample-count">${c} sample${c!==1?'s':''}</span>
+      <button class="sign-del-btn" onclick="deleteSign('${esc(n)}')" title="Delete">×</button>
+    </div>`).join('');
+}
+
+async function deleteSign(name) {
+  if (!confirm(`Delete "${name}" and all its samples?`)) return;
+  try {
+    const r = await fetch(`${backendUrl}/signs/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (r.ok) { showToast(`"${name}" deleted.`); refreshSignsList(); }
+    else showToast(`Could not delete "${name}".`);
+  } catch { showToast('Backend not reachable.'); }
+}
+
+signNameInput.addEventListener('input', () => {
+  sampleBar.style.width = '0%'; sampleCountLabel.textContent = `0 / ${TARGET_SAMPLES}`;
+  accuracyBadge.classList.remove('visible');
+});
+
+const QUICK_SIGNS = [
+  {name:'HELLO',builtIn:true},{name:'GOOD',builtIn:true},{name:'BAD',builtIn:true},
+  {name:'YES',builtIn:true},{name:'V',builtIn:true},
+  {name:'HELP',builtIn:false},{name:'NO',builtIn:false},{name:'STOP',builtIn:false},
+  {name:'SORRY',builtIn:false},{name:'THANK_YOU',builtIn:false},{name:'WATER',builtIn:false},
+  {name:'MEDICINE',builtIn:false},{name:'DOCTOR',builtIn:false},{name:'PAIN',builtIn:false},
+  {name:'NAMASTE',builtIn:false},
+];
+
+function renderQuickGrid(trained = {}) {
+  const g = document.getElementById('quick-signs-grid'); if (!g) return;
+  g.innerHTML = QUICK_SIGNS.map(({ name, builtIn }) => {
+    let cls = 'quick-sign-btn';
+    if (name in trained) cls += ' trained';
+    else if (builtIn) cls += ' built-in';
+    return `<button class="${cls}" onclick="selectSign('${name}')">${name}${builtIn?' ✓':''}</button>`;
+  }).join('');
+}
+
+function selectSign(name) {
+  signNameInput.value = name;
+  sampleBar.style.width = '0%'; sampleCountLabel.textContent = `0 / ${TARGET_SAMPLES}`;
+  accuracyBadge.classList.remove('visible');
+  signNameInput.focus(); signNameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function resetAllSigns() {
+  if (!confirm('Delete ALL training data?\n\nTier 1 gesture AI still works without samples.')) return;
+  if (!backendReady) { showToast('Backend not connected.'); return; }
+  try {
+    const r = await fetch(`${backendUrl}/signs`);
+    const d = await r.json();
+    for (const n of Object.keys(d.signs))
+      await fetch(`${backendUrl}/signs/${encodeURIComponent(n)}`, { method: 'DELETE' });
+    refreshSignsList(); showToast(`Cleared ${Object.keys(d.signs).length} signs.`);
+  } catch { showToast('Reset failed — is the backend running?'); }
+}
+
+// ════════════════════════════════════════════════════════
+//  WAVEFORM (minimal, between footer and confirm)
+// ════════════════════════════════════════════════════════
+const waveCanvas = document.createElement('canvas');
+waveCanvas.id = 'wave'; waveCanvas.style.cssText = 'display:none';
+const wCtx = waveCanvas.getContext('2d');
+
+function animateWave() {
+  wAmp += (wTarget - wAmp) * 0.07;
+  if (wAmp > 0.3) wPhase += 0.048;
+  wRaf = requestAnimationFrame(animateWave);
+}
+
+// ════════════════════════════════════════════════════════
+//  CONNECTOR
+// ════════════════════════════════════════════════════════
+function drawConnector() {
+  const W = connCanvas.parentElement ? connCanvas.parentElement.clientWidth : 320;
+  const H = 18;
+  connCanvas.width = W; connCanvas.height = H;
+  connCtx.clearRect(0, 0, W, H);
+  const cx = W / 2;
+  const grad = connCtx.createLinearGradient(cx, 0, cx, H);
+  grad.addColorStop(0, 'rgba(249,197,176,0.20)');
+  grad.addColorStop(1, 'rgba(249,197,176,0)');
+  connCtx.beginPath();
+  connCtx.moveTo(cx-32, 0); connCtx.lineTo(cx+32, 0);
+  connCtx.lineTo(cx+6, H); connCtx.lineTo(cx-6, H);
+  connCtx.closePath();
+  connCtx.fillStyle = grad; connCtx.fill();
+}
+
+window.addEventListener('resize', drawConnector);
+
+// ════════════════════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════════════════════
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer = null;
+function showToast(msg, warm = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.toggle('warm', warm);
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove('show'); t.classList.remove('warm'); }, warm ? 1500 : 4000);
+}
+
+// ════════════════════════════════════════════════════════
+//  INTERPRETER CARD
+// ════════════════════════════════════════════════════════
+const IC_CONTENT = {
+  en: {
+    headline: 'I am deaf.',
+    body: 'This app translates my sign language into text in real time. Please read the screen as I sign.'
+  },
+  hi: {
+    headline: 'मैं बधिर हूँ।',
+    body: 'यह ऐप मेरी सांकेतिक भाषा को रीयल-टाइम में टेक्स्ट में अनुवाद करता है। कृपया स्क्रीन पढ़ें।'
+  },
+  gu: {
+    headline: 'હું બહેરો/બહેરી છું।',
+    body: 'આ એપ મારી સાંકેતિક ભાષાને રીઅલ-ટાઇમમાં ટેક્સ્ટમાં અનુવાદ કરે છે। કૃપા કરીને સ્ક્રીન વાંચો।'
+  }
+};
+let currentCardLang = 'en';
+
+function openInterpreterCard() {
+  document.getElementById('ic-overlay').classList.add('show');
+  document.getElementById('ic-sheet').classList.add('show');
+}
+
+function closeInterpreterCard() {
+  document.getElementById('ic-overlay').classList.remove('show');
+  document.getElementById('ic-sheet').classList.remove('show');
+}
+
+function switchCardLang(lang) {
+  currentCardLang = lang;
+  const d = IC_CONTENT[lang];
+  document.getElementById('ic-headline').textContent = d.headline;
+  document.getElementById('ic-body').textContent = d.body;
+  document.querySelectorAll('.ic-lang').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === lang);
+  });
+}
+
+async function shareCard() {
+  const d = IC_CONTENT[currentCardLang];
+  const text = `${d.headline} ${d.body}`;
+  if (navigator.share) {
+    try { await navigator.share({ text }); return; }
+    catch(e) { if (e.name === 'AbortError') return; }
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Copied to clipboard');
+  } catch { showToast('Could not copy — try selecting the text manually.'); }
+}
+
+// Swipe-down to dismiss interpreter card
+(function() {
+  let icTouchStartY = 0;
+  document.addEventListener('touchstart', e => {
+    const sheet = document.getElementById('ic-sheet');
+    if (sheet?.classList.contains('show') && sheet.contains(e.target)) {
+      icTouchStartY = e.touches[0].clientY;
+    } else {
+      icTouchStartY = 0;
+    }
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (!icTouchStartY) return;
+    const dy = e.changedTouches[0].clientY - icTouchStartY;
+    if (dy > 60) closeInterpreterCard();
+    icTouchStartY = 0;
+  }, { passive: true });
+})();
+
+// ════════════════════════════════════════════════════════
+//  HAND ME THE PHONE (shake to flip layout)
+// ════════════════════════════════════════════════════════
+let layoutFlipped = false;
+let lastShakeTime = 0;
+let motionListening = false;
+
+function flipLayout() {
+  layoutFlipped = !layoutFlipped;
+  appEl.classList.toggle('flipped', layoutFlipped);
+  try { if (navigator.vibrate) navigator.vibrate(80); } catch {}
+  showToast('Handed over', true);
+}
+
+function handleMotion(e) {
+  const acc = e.accelerationIncludingGravity;
+  if (!acc) return;
+  const mag = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
+  const now = Date.now();
+  if (mag > 15 && now - lastShakeTime > 1200) {
+    lastShakeTime = now;
+    flipLayout();
+  }
+}
+
+async function startMotionListening() {
+  if (motionListening) return;
+  if (typeof DeviceMotionEvent !== 'undefined' &&
+      typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      const result = await DeviceMotionEvent.requestPermission();
+      if (result !== 'granted') return;
+    } catch { return; }
+  }
+  window.addEventListener('devicemotion', handleMotion, { passive: true });
+  motionListening = true;
+}
+</script>
+</body>
 </html>
