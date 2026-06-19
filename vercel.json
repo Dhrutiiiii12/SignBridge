@@ -1,5 +1,6 @@
 {
-  "buildCommand": "mkdir -p dist && cp index.html dist/index.html",
-  "outputDirectory": "dist",
-  "installCommand": "echo skip"
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
