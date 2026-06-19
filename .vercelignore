@@ -1,11 +1,2 @@
+# The Python backend runs locally/separately — never deploy it to Vercel.
 backend/
-src/
-node_modules/
-dist/
-package.json
-package-lock.json
-pnpm-workspace.yaml
-postcss.config.mjs
-tsconfig.json
-tsconfig.node.json
-vite.config.ts

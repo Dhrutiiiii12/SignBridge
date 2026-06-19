@@ -2,7 +2,7 @@
 SignBridge backend — FastAPI server for hand-landmark-based sign recognition.
 
 Run:
-    uvicorn main:app --reload --port 8001
+    uvicorn main:app --reload --port 8000
 
 Endpoints:
     POST /recognize          → predict sign from landmarks
