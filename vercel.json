@@ -1,4 +1,10 @@
 {
   "version": 2,
-  "builds": [{ "src": "**/*", "use": "@vercel/static" }]
+  "builds": [
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "signbridge.html", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }
